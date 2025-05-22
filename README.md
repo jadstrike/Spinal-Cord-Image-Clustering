@@ -12,7 +12,7 @@ The team members are listed below in alphabetical order:
 
 | Name            |
 |-----------------|
-| Abubaker        | 
+|Aboubacar Traore | 
 | Khant Zwe Naing | 
 | Kunle           |
 | Rishika         | 
