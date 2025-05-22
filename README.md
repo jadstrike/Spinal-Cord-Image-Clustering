@@ -1,11 +1,15 @@
-This is the Data Science Project Team astra have done for competition at the univrsity of hertfordshire
+# Data Science Project – University of Hertfordshire Competition
 
-Our team members include
+This repository contains the Data Science project completed by Team Astra for a competition held at the University of Hertfordshire.
 
-| Name           |
-|----------------|
-| Abubaker       | 
-| Khant Zwe Naing| 
-| Kunle          |
-| Rishika        | 
-| Ye Lin Soe     | 
+## Team Members
+
+The team members are listed below in alphabetical order:
+
+| Name            |
+|-----------------|
+| Abubaker        | 
+| Khant Zwe Naing | 
+| Kunle           |
+| Rishika         | 
+| Ye Lin Soe      |
