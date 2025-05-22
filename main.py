@@ -81,6 +81,10 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     img_array = np.array(image.convert('L'))  # Convert to grayscale
     
+    # Ensure img_array is uint8
+    if img_array.dtype != np.uint8:
+        img_array = img_array.astype(np.uint8)
+    
     # Resize if optimize option is selected
     if optimize_large_images:
         img_array = resize_image(img_array, max_size=1000)
@@ -94,6 +98,10 @@ if uploaded_file is not None:
             # Preprocess image
             preprocessed_img = preprocess_image(img_array)
             
+            # Ensure preprocessed_img is uint8
+            if preprocessed_img.dtype != np.uint8:
+                preprocessed_img = preprocessed_img.astype(np.uint8)
+            
             # Display preprocessed image
             st.image(preprocessed_img, caption="Preprocessed (Contrast Enhanced)", use_container_width=True)
             
@@ -105,6 +113,10 @@ if uploaded_file is not None:
             
             # Apply edge enhancement
             final_img = enhance_edges(blended_img)
+            
+            # Ensure final_img is uint8
+            if final_img.dtype != np.uint8:
+                final_img = final_img.astype(np.uint8)
             
             # Display enhanced image
             st.image(final_img, caption=f"Enhanced X-ray Image ({n_clusters} Clusters)", use_container_width=True)
