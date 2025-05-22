@@ -90,7 +90,8 @@ if uploaded_file is not None:
         img_array = resize_image(img_array, max_size=1000)
     
     # Display original image
-    st.image(img_array, caption="Original X-ray Image", use_container_width=True)
+    st.image(img_array, caption="Original X-ray Image", width=None)  # Use width=None for dynamic sizing
+    # st.image(img_array, caption="Original X-ray Image", use_container_width=True)  # Fallback, commented out
     
     # Enhance image when button is clicked
     if st.button("Enhance Image"):
@@ -103,7 +104,8 @@ if uploaded_file is not None:
                 preprocessed_img = preprocessed_img.astype(np.uint8)
             
             # Display preprocessed image
-            st.image(preprocessed_img, caption="Preprocessed (Contrast Enhanced)", use_container_width=True)
+            st.image(preprocessed_img, caption="Preprocessed (Contrast Enhanced)", width=None)
+            # st.image(preprocessed_img, caption="Preprocessed (Contrast Enhanced)", use_container_width=True)  # Fallback
             
             # Enhance image using K-Means
             clustered_img, labels = enhance_image_kmeans(preprocessed_img, n_clusters)
@@ -119,7 +121,8 @@ if uploaded_file is not None:
                 final_img = final_img.astype(np.uint8)
             
             # Display enhanced image
-            st.image(final_img, caption=f"Enhanced X-ray Image ({n_clusters} Clusters)", use_container_width=True)
+            st.image(final_img, caption=f"Enhanced X-ray Image ({n_clusters} Clusters)", width=None)
+            # st.image(final_img, caption=f"Enhanced X-ray Image ({n_clusters} Clusters)", use_container_width=True)  # Fallback
             
             # Provide download link
             enhanced_image = Image.fromarray(final_img)
