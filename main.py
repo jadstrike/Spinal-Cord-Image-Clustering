@@ -7,7 +7,6 @@ import io
 import zipfile
 import pandas as pd
 import os
-from scipy.ndimage import label as scipy_label
 
 # Function to resize large images while preserving aspect ratio
 def resize_image(image, max_size=1000):
@@ -20,7 +19,6 @@ def resize_image(image, max_size=1000):
 
 # Function to preprocess the image with CLAHE
 def preprocess_image(image):
-    # Apply CLAHE for adaptive contrast enhancement
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(image)
     return enhanced
@@ -48,17 +46,12 @@ def blend_images(original, clustered, alpha=0.7):
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
-# Function to detect and label fracture lines with improved edge detection
+# Function to detect and label fracture lines
 def detect_and_label_fracture_lines(image):
-    # Hybrid edge detection: Sobel followed by Canny
-    sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
-    sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
-    edges_sobel = cv2.magnitude(sobel_x, sobel_y)
-    edges_sobel = cv2.convertScaleAbs(edges_sobel)
-    edges = cv2.Canny(edges_sobel, 50, 150)  # Adjusted thresholds for sensitivity
-    
+    # Simplified Canny edge detection with adjusted thresholds
+    edges = cv2.Canny(image, 80, 200)  # Increased lower threshold for better sensitivity
     kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
+    edges = cv2.dilate(edges, kernel, iterations=2)  # Increased dilation for thicker lines
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(edges, connectivity=8)
     return edges, num_labels, labels, stats, centroids
 
@@ -75,30 +68,37 @@ def overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, labels, sta
             overlap = False
             for pos in label_positions:
                 dist = np.sqrt((cx - pos[0])**2 + (cy - pos[1])**2)
-                if dist < 30:  # Minimum distance to avoid overlap
+                if dist < 40:  # Increased distance to reduce overlap
                     overlap = True
-                    cy += 20  # Offset vertically if too close
+                    cy += 30  # Increased offset for clarity
                     break
             label_positions.append((cx, cy))
             
-            enhanced_rgb[labels == i] = [255, 0, 0]  # Red fracture lines
+            # Highlight fracture lines with higher intensity
+            enhanced_rgb[labels == i] = [255, 50, 50]  # Brighter red for better visibility
+            
+            # Add label with improved visibility
             severity = "Mild" if stats[i, cv2.CC_STAT_AREA] < 500 else "Moderate" if stats[i, cv2.CC_STAT_AREA] < 1000 else "Severe"
             label_text = f"Fracture {i} (Severity: {severity})"
-            
-            # Add background rectangle and larger, thicker text
-            (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
-            cv2.rectangle(enhanced_rgb, (cx, cy - text_height - baseline), (cx + text_width, cy + baseline), (0, 0, 0), -1)
-            cv2.putText(enhanced_rgb, label_text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+            (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 3)
+            # Semi-transparent black background for better contrast
+            overlay = enhanced_rgb.copy()
+            cv2.rectangle(overlay, (cx, cy - text_height - baseline), (cx + text_width, cy + baseline), (0, 0, 0), -1)
+            alpha = 0.6  # Transparency for background
+            cv2.addWeighted(overlay, alpha, enhanced_rgb, 1 - alpha, 0, enhanced_rgb)
+            cv2.putText(enhanced_rgb, label_text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 3, cv2.LINE_AA)
     
     return enhanced_rgb
 
-# Process a single image and return intermediate stages
+# Process a single image and return all stages
 def process_image(image, n_clusters, optimize_large_images):
     img_array = np.array(image.convert('L'))
     if img_array.dtype != np.uint8:
         img_array = img_array.astype(np.uint8)
+    original_img = img_array.copy()  # Store original image
     if optimize_large_images:
         img_array = resize_image(img_array, max_size=1000)
+        original_img = resize_image(original_img, max_size=1000)
     
     # Preprocessed image
     preprocessed_img = preprocess_image(img_array)
@@ -113,7 +113,7 @@ def process_image(image, n_clusters, optimize_large_images):
     fracture_lines, num_labels, fracture_labels, stats, centroids = detect_and_label_fracture_lines(enhanced_img)
     final_img_with_fractures = overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, fracture_labels, stats, centroids)
     
-    return preprocessed_img, enhanced_img, final_img_with_fractures
+    return original_img, preprocessed_img, enhanced_img, final_img_with_fractures
 
 # Streamlit app
 st.title("X-ray Image Enhancement with K-Means Clustering (Fracture Line Detection)")
@@ -169,9 +169,10 @@ if uploaded_files or dataset_file:
         with st.spinner("Enhancing images and detecting fracture lines..."):
             for i, (image, name) in enumerate(zip(images_to_process, image_names)):
                 st.write(f"Processing {name}...")
-                preprocessed_img, enhanced_img, final_img_with_fractures = process_image(image, n_clusters, optimize_large_images)
+                original_img, preprocessed_img, enhanced_img, final_img_with_fractures = process_image(image, n_clusters, optimize_large_images)
                 
-                # Display intermediate stages
+                # Display all stages
+                st.image(original_img, caption=f"Original {name}", width=None)
                 st.image(preprocessed_img, caption=f"Preprocessed {name}", width=None)
                 st.image(enhanced_img, caption=f"Enhanced {name} (Before Labeling)", width=None)
                 st.image(final_img_with_fractures, caption=f"Enhanced {name} with Labeled Fracture Lines", width=None)
