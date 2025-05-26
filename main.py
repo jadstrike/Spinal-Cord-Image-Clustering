@@ -7,6 +7,7 @@ import io
 import zipfile
 import pandas as pd
 import os
+from scipy.ndimage import label as scipy_label
 
 # Function to resize large images while preserving aspect ratio
 def resize_image(image, max_size=1000):
@@ -17,11 +18,12 @@ def resize_image(image, max_size=1000):
         image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return image
 
-# Function to preprocess the image with edge-preserving filter
+# Function to preprocess the image with CLAHE
 def preprocess_image(image):
-    filtered = cv2.bilateralFilter(image, d=9, sigmaColor=75, sigmaSpace=75)
-    equalized = cv2.equalizeHist(filtered)
-    return equalized
+    # Apply CLAHE for adaptive contrast enhancement
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(image)
+    return enhanced
 
 # Function to apply K-Means clustering for image enhancement
 def enhance_image_kmeans(image, n_clusters=8):
@@ -32,7 +34,11 @@ def enhance_image_kmeans(image, n_clusters=8):
     centers = kmeans.cluster_centers_
     segmented_pixels = centers[labels].reshape(image.shape)
     segmented_image = cv2.normalize(segmented_pixels, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    return segmented_image, labels
+    
+    # Apply unsharp masking for sharpness
+    gaussian = cv2.GaussianBlur(segmented_image, (5, 5), 1.0)
+    sharpened = cv2.addWeighted(segmented_image, 1.5, gaussian, -0.5, 0)
+    return sharpened, labels
 
 # Function to blend original and clustered image
 def blend_images(original, clustered, alpha=0.7):
@@ -42,24 +48,48 @@ def blend_images(original, clustered, alpha=0.7):
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
-# Function to detect and label fracture lines
+# Function to detect and label fracture lines with improved edge detection
 def detect_and_label_fracture_lines(image):
-    edges = cv2.Canny(image, 100, 200)
+    # Hybrid edge detection: Sobel followed by Canny
+    sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+    edges_sobel = cv2.magnitude(sobel_x, sobel_y)
+    edges_sobel = cv2.convertScaleAbs(edges_sobel)
+    edges = cv2.Canny(edges_sobel, 50, 150)  # Adjusted thresholds for sensitivity
+    
     kernel = np.ones((3, 3), np.uint8)
     edges = cv2.dilate(edges, kernel, iterations=1)
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(edges, connectivity=8)
     return edges, num_labels, labels, stats, centroids
 
-# Function to overlay fracture lines with labels
+# Function to overlay fracture lines with improved label visibility
 def overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, labels, stats, centroids):
     enhanced_rgb = cv2.cvtColor(enhanced_img, cv2.COLOR_GRAY2RGB)
+    label_positions = []  # To track and avoid stacking
+    
     for i in range(1, num_labels):
         if stats[i, cv2.CC_STAT_AREA] > 50:
             cx, cy = int(centroids[i][0]), int(centroids[i][1])
-            enhanced_rgb[labels == i] = [255, 0, 0]
+            
+            # Check for overlapping labels
+            overlap = False
+            for pos in label_positions:
+                dist = np.sqrt((cx - pos[0])**2 + (cy - pos[1])**2)
+                if dist < 30:  # Minimum distance to avoid overlap
+                    overlap = True
+                    cy += 20  # Offset vertically if too close
+                    break
+            label_positions.append((cx, cy))
+            
+            enhanced_rgb[labels == i] = [255, 0, 0]  # Red fracture lines
             severity = "Mild" if stats[i, cv2.CC_STAT_AREA] < 500 else "Moderate" if stats[i, cv2.CC_STAT_AREA] < 1000 else "Severe"
             label_text = f"Fracture {i} (Severity: {severity})"
-            cv2.putText(enhanced_rgb, label_text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+            
+            # Add background rectangle and larger, thicker text
+            (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+            cv2.rectangle(enhanced_rgb, (cx, cy - text_height - baseline), (cx + text_width, cy + baseline), (0, 0, 0), -1)
+            cv2.putText(enhanced_rgb, label_text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+    
     return enhanced_rgb
 
 # Process a single image and return intermediate stages
