@@ -62,12 +62,6 @@ def overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, labels, sta
             cv2.putText(enhanced_rgb, label_text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
     return enhanced_rgb
 
-# Function to simulate fracture progression
-def simulate_fracture_progression(fracture_lines):
-    kernel = np.ones((5, 5), np.uint8)
-    progressed = cv2.dilate(fracture_lines, kernel, iterations=3)  # Simulate growth
-    return progressed
-
 # Process a single image
 def process_image(image, n_clusters, optimize_large_images):
     img_array = np.array(image.convert('L'))
@@ -82,8 +76,7 @@ def process_image(image, n_clusters, optimize_large_images):
     blended_img = blend_images(preprocessed_img, clustered_img, alpha=0.7)
     fracture_lines, num_labels, fracture_labels, stats, centroids = detect_and_label_fracture_lines(blended_img)
     final_img_with_fractures = overlay_fracture_lines(blended_img, fracture_lines, num_labels, fracture_labels, stats, centroids)
-    progressed_fractures = simulate_fracture_progression(fracture_lines)
-    return final_img_with_fractures, progressed_fractures
+    return final_img_with_fractures
 
 # Streamlit app
 st.title("X-ray Image Enhancement with K-Means Clustering (Fracture Line Detection)")
@@ -139,9 +132,8 @@ if uploaded_files or dataset_file:
         with st.spinner("Enhancing images and detecting fracture lines..."):
             for i, (image, name) in enumerate(zip(images_to_process, image_names)):
                 st.write(f"Processing {name}...")
-                final_img_with_fractures, progressed_fractures = process_image(image, n_clusters, optimize_large_images)
+                final_img_with_fractures = process_image(image, n_clusters, optimize_large_images)
                 st.image(final_img_with_fractures, caption=f"Enhanced {name} with Labeled Fracture Lines", width=None)
-                st.image(progressed_fractures, caption=f"Simulated Fracture Progression for {name}", width=None)
                 enhanced_images.append((final_img_with_fractures, name))
 
         # Create ZIP file for download
