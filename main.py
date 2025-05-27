@@ -42,6 +42,44 @@ def blend_images(original, clustered, alpha=0.7):
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
+# Function to detect and label fracture lines
+def detect_and_label_fracture_lines(image):
+    # Simplified Canny edge detection with adjusted thresholds
+    edges = cv2.Canny(image, 80, 200)  # Increased lower threshold for better sensitivity
+    kernel = np.ones((3, 3), np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations=2)  # Increased dilation for thicker lines
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(edges, connectivity=8)
+    return edges, num_labels, labels, stats, centroids
+
+# Function to overlay fracture lines with improved labels
+def overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, labels, stats, centroids):
+    enhanced_rgb = cv2.cvtColor(enhanced_img, cv2.COLOR_GRAY2RGB)
+    label_positions = []
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] > 50:
+            cx, cy = int(centroids[i][0]), int(centroids[i][1])
+            overlap = False
+            for pos in label_positions:
+                dist = np.sqrt((cx - pos[0])**2 + (cy - pos[1])**2)
+                if dist < 40:  # Increased distance to reduce overlap
+                    overlap = True
+                    cy += 30  # Increased offset for clarity
+                    break
+            label_positions.append((cx, cy))
+            # Highlight fracture lines with higher intensity
+            enhanced_rgb[labels == i] = [255, 50, 50]  # Brighter red for better visibility
+            # Add label with improved visibility
+            severity = "Mild" if stats[i, cv2.CC_STAT_AREA] < 500 else "Moderate" if stats[i, cv2.CC_STAT_AREA] < 1000 else "Severe"
+            label_text = f"Fracture {i} (Severity: {severity})"
+            (text_width, text_height), baseline = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 3)
+            # Semi-transparent black background for better contrast
+            overlay = enhanced_rgb.copy()
+            cv2.rectangle(overlay, (cx, cy - text_height - baseline), (cx + text_width, cy + baseline), (0, 0, 0), -1)
+            alpha = 0.6  # Transparency for background
+            cv2.addWeighted(overlay, alpha, enhanced_rgb, 1 - alpha, 0, enhanced_rgb)
+            cv2.putText(enhanced_rgb, label_text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 3, cv2.LINE_AA)
+    return enhanced_rgb
+
 # Process a single image and return all stages
 def process_image(image, n_clusters, optimize_large_images):
     img_array = np.array(image.convert('L'))
@@ -57,10 +95,13 @@ def process_image(image, n_clusters, optimize_large_images):
     clustered_img = enhance_image_kmeans(preprocessed_img, n_clusters)
     # Blend the clustered image with the preprocessed image
     enhanced_img = blend_images(preprocessed_img, clustered_img, alpha=0.7)
-    return original_img, preprocessed_img, enhanced_img
+    # Detect and label fracture lines
+    fracture_lines, num_labels, fracture_labels, stats, centroids = detect_and_label_fracture_lines(enhanced_img)
+    final_img_with_fractures = overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, fracture_labels, stats, centroids)
+    return original_img, preprocessed_img, enhanced_img, final_img_with_fractures
 
 # Streamlit app
-st.title("X-ray Image Enhancement with K-Means Clustering")
+st.title("X-ray Image Enhancement with K-Means Clustering (Fracture Line Detection)")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload an X-ray image or a ZIP file containing X-ray images (JPG/PNG)", type=["jpg", "png", "zip"])
@@ -86,18 +127,20 @@ if uploaded_file is not None:
         image_names = ["Uploaded Image"]
     
     # Process and display images
-    with st.spinner("Enhancing images..."):
+    with st.spinner("Enhancing images and detecting fracture lines..."):
         for i, (image, name) in enumerate(zip(images_to_process, image_names)):
             st.write(f"Processing {name}...")
-            original_img, preprocessed_img, enhanced_img = process_image(image, n_clusters, optimize_large_images)
+            original_img, preprocessed_img, enhanced_img, final_img_with_fractures = process_image(image, n_clusters, optimize_large_images)
             # Display final summary in one line
             st.subheader(f"Summary: All Stages for {name}")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.image(original_img, caption="Original", width=None)
             with col2:
                 st.image(preprocessed_img, caption="Preprocessed", width=None)
             with col3:
-                st.image(enhanced_img, caption="Enhanced", width=None)
+                st.image(enhanced_img, caption="Enhanced (Before Labeling)", width=None)
+            with col4:
+                st.image(final_img_with_fractures, caption="Final Enhanced with Labeled Fracture Lines", width=None)
 else:
     st.info("Please upload an X-ray image or a ZIP file containing X-ray images to begin.")
