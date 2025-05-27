@@ -44,31 +44,34 @@ def blend_images(original, clustered, alpha=0.7):
 
 # Function to detect spaces between bones (disc spaces)
 def detect_disc_spaces(image, min_space_height=5, max_space_height=20):
-    # Convert to binary image for segmentation
-    _, binary = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # Invert binary image (bones are white, spaces are black)
+    # Preprocess for better segmentation
+    blurred = cv2.GaussianBlur(image, (5, 5), 0)
+    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     binary = cv2.bitwise_not(binary)
-    # Use Canny edge detection to find bone edges
-    edges = cv2.Canny(image, 50, 150)
-    # Dilate edges to connect small gaps
-    kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
+    # Morphological operations to close gaps in bones
+    kernel = np.ones((5, 5), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
     
-    # Find contours of the bones
+    # Edge detection
+    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+    
+    # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     spaces = []
     
-    # Analyze gaps between contours (potential disc spaces)
+    # Sort contours by y-coordinate for vertical analysis
+    contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[1])
+    
+    # Analyze gaps between contours
     for i in range(len(contours) - 1):
-        # Get bounding boxes of consecutive contours
         x1, y1, w1, h1 = cv2.boundingRect(contours[i])
         x2, y2, w2, h2 = cv2.boundingRect(contours[i + 1])
         
-        # Check if contours are vertically aligned (potential disc space)
-        if abs(x1 - x2) < max(w1, w2) * 0.5:  # Ensure some overlap in x-axis
+        # Check vertical alignment and gap size
+        if abs(x1 - x2) < max(w1, w2) * 0.5 and y2 > y1 + h1:
             space_height = y2 - (y1 + h1)
             if min_space_height < space_height < max_space_height:
-                # Calculate the y-position and width of the space
                 y_space = y1 + h1 + space_height // 2
                 x_start = max(x1, x2)
                 x_end = min(x1 + w1, x2 + w2)
@@ -78,10 +81,8 @@ def detect_disc_spaces(image, min_space_height=5, max_space_height=20):
 
 # Function to overlay detected spaces on the image
 def overlay_disc_spaces(image, spaces):
-    # Convert to RGB for coloring
     img_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
     for y, x_start, x_end, space_height in spaces:
-        # Color based on space height (narrowed vs normal)
         color = (0, 255, 255) if space_height > 10 else (255, 0, 0)  # Cyan for normal, red for narrowed
         thickness = 2
         cv2.line(img_rgb, (x_start, y), (x_end, y), color, thickness)
@@ -187,17 +188,26 @@ if uploaded_file is not None:
             st.markdown('</div>', unsafe_allow_html=True)
         with cols[2]:
             st.markdown('<div class="image-container">', unsafe_allow_html=True)
-            # Placeholder for the enhanced image (to be updated with spaces if toggled)
+            # Use session state to toggle space detection
+            if f"show_spaces_{i}" not in st.session_state:
+                st.session_state[f"show_spaces_{i}"] = False
             placeholder = st.empty()
-            placeholder.image(enhanced_img, use_column_width=True)
+            if st.session_state[f"show_spaces_{i}"]:
+                spaces = detect_disc_spaces(enhanced_img)
+                if spaces:
+                    enhanced_with_spaces = overlay_disc_spaces(enhanced_img, spaces)
+                    placeholder.image(enhanced_with_spaces, use_column_width=True)
+                else:
+                    st.warning("No disc spaces detected. Try adjusting the image or parameters.")
+                    placeholder.image(enhanced_img, use_column_width=True)
+            else:
+                placeholder.image(enhanced_img, use_column_width=True)
             st.markdown('<div class="caption">Enhanced (K-Means)</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         
         # Button to toggle disc space visualization
-        if st.button(f"Show Detected Spaces Between Bones for {name}", key=f"disc_space_{i}"):
-            spaces = detect_disc_spaces(enhanced_img)
-            enhanced_with_spaces = overlay_disc_spaces(enhanced_img, spaces)
-            placeholder.image(enhanced_with_spaces, use_column_width=True)
+        if st.button(f"Show Detected Spaces Between Bones for {name}", key=f"disc_space_btn_{i}"):
+            st.session_state[f"show_spaces_{i}"] = not st.session_state[f"show_spaces_{i}"]
         
         # Download button for individual enhanced image
         enhanced_bytes = image_to_bytes(enhanced_img)
