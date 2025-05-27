@@ -1,7 +1,7 @@
 import streamlit as st
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 from PIL import Image
 import io
 
@@ -14,34 +14,26 @@ def resize_image(image, max_size=1000):
         image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return image
 
-# Function to preprocess the image with an advanced algorithm
+# Function to preprocess the image with advanced techniques
 def preprocess_image(image):
-    # Apply bilateral filter to reduce noise while preserving edges
-    filtered = cv2.bilateralFilter(image, d=5, sigmaColor=50, sigmaSpace=50)
+    # Apply non-local means denoising to reduce noise while preserving details
+    denoised = cv2.fastNlMeansDenoising(image, h=10, templateWindowSize=7, searchWindowSize=21)
     
-    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) for local contrast enhancement
+    # Apply CLAHE for local contrast enhancement
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(filtered)
+    enhanced = clahe.apply(denoised)
     
     return enhanced
 
-# Function to apply K-Means clustering for image enhancement
-def enhance_image_kmeans(image, n_clusters=5):
-    # Reshape image to a 1D array of pixels
+# Function to apply Gaussian Mixture Model for adaptive clustering
+def enhance_image_gmm(image, n_components=5):
     pixel_values = image.reshape(-1, 1)
-    
-    # Apply K-Means clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    kmeans.fit(pixel_values)
-    
-    # Get cluster labels and centers
-    labels = kmeans.labels_
-    centers = kmeans.cluster_centers_
-    
-    # Create segmented image by mapping pixels to cluster centers
+    gmm = GaussianMixture(n_components=n_components, covariance_type='full', random_state=42)
+    gmm.fit(pixel_values)
+    labels = gmm.predict(pixel_values)
+    centers = gmm.means_
     segmented_pixels = centers[labels].reshape(image.shape)
     segmented_image = cv2.normalize(segmented_pixels, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    
     return segmented_image
 
 # Function to blend original and clustered image
@@ -52,21 +44,25 @@ def blend_images(original, clustered, alpha=0.5):
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
-# Function to apply sharpening to emphasize bone edges and fractures
-def sharpen_image(image):
-    # Define a sharpening kernel
-    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-    sharpened = cv2.filter2D(image, -1, kernel)
-    return sharpened
+# Function to apply multi-scale unsharp masking
+def multi_scale_unsharp_mask(image):
+    # Small scale (fine details)
+    blurred_small = cv2.GaussianBlur(image, (3, 3), 0)
+    sharpened_small = image + (image - blurred_small) * 1.5
+    
+    # Medium scale (broader edges)
+    blurred_medium = cv2.GaussianBlur(image, (5, 5), 0)
+    sharpened_medium = image + (image - blurred_medium) * 1.5
+    
+    # Combine scales with weighting
+    combined = cv2.addWeighted(sharpened_small, 0.6, sharpened_medium, 0.4, 0)
+    return np.clip(combined, 0, 255).astype(np.uint8)
 
 # Streamlit app
-st.title("X-ray Image Enhancement with K-Means Clustering")
+st.title("Advanced X-ray Image Enhancement")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload an X-ray image (JPG/PNG)", type=["jpg", "png"])
-
-# Number of clusters input (for future flexibility, currently fixed at 5)
-n_clusters = 5  # Fixed for optimal bone structure enhancement
 
 # Option to optimize for large images
 optimize_large_images = st.checkbox("Optimize for Large Images (faster processing)", value=False)
@@ -102,17 +98,17 @@ if uploaded_file is not None:
             # Display preprocessed image
             st.image(preprocessed_img, caption="Preprocessed Image (Advanced Algorithm)", width=None)
             
-            # Step 3: Enhance image using K-Means
-            clustered_img = enhance_image_kmeans(preprocessed_img, n_clusters)
+            # Step 3: Enhance image using GMM
+            clustered_img = enhance_image_gmm(preprocessed_img)
             
             # Blend the clustered image with the preprocessed image
             blended_img = blend_images(preprocessed_img, clustered_img, alpha=0.5)
             
-            # Apply sharpening to emphasize bone structures and fractures
-            final_img = sharpen_image(blended_img)
+            # Apply multi-scale unsharp masking
+            final_img = multi_scale_unsharp_mask(blended_img)
             
             # Display final enhanced image
-            st.image(final_img, caption=f"Final Enhanced Image ({n_clusters} Clusters)", width=None)
+            st.image(final_img, caption="Final Enhanced Image", width=None)
             
             # Step 4: Display all images in one line
             st.subheader("Summary: All Stages in One Line")
