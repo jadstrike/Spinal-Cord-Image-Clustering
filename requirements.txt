@@ -4,3 +4,5 @@ numpy==2.1.0
 scikit-learn==1.5.1
 pillow==10.4.0
 matplotlib==3.9.0
+scipy==1.14.1 
+scikit-image==0.23.2
