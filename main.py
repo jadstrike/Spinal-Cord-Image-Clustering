@@ -170,6 +170,18 @@ st.markdown("""
     .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
     .status { font-size: 14px; margin-top: 10px; }
     .stDownloadButton { margin-top: 10px; }
+    .modal {
+      display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100vw; height: 100vh;
+      overflow: auto; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center;
+    }
+    .modal-content {
+      margin: auto; display: block; max-width: 90vw; max-height: 90vh; border-radius: 10px;
+      box-shadow: 0 0 20px #000;
+    }
+    .close {
+      position: absolute; top: 30px; right: 50px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer;
+      z-index: 10000;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -190,50 +202,80 @@ if uploaded_file:
     clustered = enhance_image_kmeans(processed, n_clusters)
     enhanced = blend_images(processed, clustered)
     
+    # Prepare images for download
+    images_dict = {
+        'Original': image_to_bytes(img_array),
+        'Preprocessed': image_to_bytes(processed),
+        'Enhanced': image_to_bytes(enhanced)
+    }
+    if enable_detection:
+        spaces = detect_disc_spaces(enhanced)
+        overlaid = overlay_spaces(enhanced, spaces)
+        images_dict['Analysis'] = image_to_bytes(overlaid)
+    
+    # Prepare ZIP for download
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for key, img_bytes in images_dict.items():
+            zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
+    zip_buffer.seek(0)
+    
     # Display results
     col1, col2, col3 = st.columns(3)
     with col1:
+        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         st.image(img_array, caption="Original", use_column_width=True)
+        st.markdown(f'''<button onclick="openModal('original-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
         st.download_button(
-            label="Download Original",
+            label="Download Original Image",
             data=image_to_bytes(img_array),
             file_name=f"{filename}_original.png",
-            mime="image/png"
+            mime="image/png",
+            key="download1"
         )
+        st.markdown('</div>', unsafe_allow_html=True)
     with col2:
+        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
+        st.markdown(f'''<button onclick="openModal('preprocessed-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
         st.download_button(
-            label="Download Preprocessed",
+            label="Download Preprocessed Image",
             data=image_to_bytes(processed),
             file_name=f"{filename}_preprocessed.png",
-            mime="image/png"
+            mime="image/png",
+            key="download2"
         )
+        st.markdown('</div>', unsafe_allow_html=True)
     with col3:
+        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         if enable_detection:
-            spaces = detect_disc_spaces(enhanced)
-            overlaid = overlay_spaces(enhanced, spaces)
             st.image(overlaid, caption="Disc Space Analysis", use_column_width=True)
-            
-            # Show measurements
-            st.subheader("Disc Space Measurements")
-            data = [[f"Space {i+1}", s['type'], f"{s['height']:.1f}px", f"{s['width']:.1f}px"] 
-                   for i,s in enumerate(spaces)]
-            st.table(pd.DataFrame(data, columns=["Space", "Type", "Height", "Width"]))
-            
+            st.markdown(f'''<button onclick="openModal('analysis-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
             st.download_button(
-                label="Download Analysis",
+                label="Download Analysis Image",
                 data=image_to_bytes(overlaid),
                 file_name=f"{filename}_analysis.png",
-                mime="image/png"
+                mime="image/png",
+                key="download3"
             )
         else:
             st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
+            st.markdown(f'''<button onclick="openModal('enhanced-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
             st.download_button(
-                label="Download Enhanced",
+                label="Download Enhanced Image",
                 data=image_to_bytes(enhanced),
                 file_name=f"{filename}_enhanced.png",
-                mime="image/png"
+                mime="image/png",
+                key="download4"
             )
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Show measurements
+    if enable_detection:
+        st.subheader("Disc Space Measurements")
+        data = [[f"Space {i+1}", s['type'], f"{s['height']:.1f}px", f"{s['width']:.1f}px"] 
+               for i,s in enumerate(spaces)]
+        st.table(pd.DataFrame(data, columns=["Space", "Type", "Height", "Width"]))
     
     # Health score
     if enable_detection and spaces:
@@ -244,20 +286,25 @@ if uploaded_file:
             st.progress(int(score))
             st.caption("Higher scores indicate better spinal health with more normal disc spaces")
     
-    # ZIP download
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr(f"{filename}_original.png", image_to_bytes(img_array))
-        zip_file.writestr(f"{filename}_preprocessed.png", image_to_bytes(processed))
-        zip_file.writestr(f"{filename}_enhanced.png", image_to_bytes(enhanced))
-        if enable_detection:
-            zip_file.writestr(f"{filename}_analysis.png", image_to_bytes(overlaid))
-    
-    st.download_button(
-        label="Download All Results (ZIP)",
-        data=zip_buffer,
-        file_name=f"{filename}_results.zip",
-        mime="application/zip"
-    )
+    # Modal HTML/CSS/JS for full image view
+    st.markdown('''
+    <div id="original-modal" class="modal"><span class="close" onclick="closeModal('original-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{0}"></div>
+    <div id="preprocessed-modal" class="modal"><span class="close" onclick="closeModal('preprocessed-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{1}"></div>
+    <div id="enhanced-modal" class="modal"><span class="close" onclick="closeModal('enhanced-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{2}"></div>
+    <div id="analysis-modal" class="modal"><span class="close" onclick="closeModal('analysis-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{3}"></div>
+    <script>
+    function openModal(id) {
+      document.getElementById(id).style.display = 'flex';
+    }
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+    </script>
+    '''.format(
+        Image.fromarray(img_array).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if hasattr(Image.fromarray(img_array), '_repr_png_') else '',
+        Image.fromarray(processed).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if hasattr(Image.fromarray(processed), '_repr_png_') else '',
+        Image.fromarray(enhanced).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if hasattr(Image.fromarray(enhanced), '_repr_png_') else '',
+        Image.fromarray(overlaid).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if (enable_detection and 'overlaid' in locals() and hasattr(Image.fromarray(overlaid), '_repr_png_')) else ''
+    ), unsafe_allow_html=True)
 else:
     st.info("Please upload a spinal X-ray image to begin analysis")
