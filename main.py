@@ -5,9 +5,8 @@ from sklearn.cluster import KMeans
 from PIL import Image
 import io
 import zipfile
-import pandas as pd
 import os
-import shutil # Added for directory cleanup
+import shutil
 
 # Function to resize large images while preserving aspect ratio
 def resize_image(image, max_size=1000):
@@ -26,18 +25,18 @@ def preprocess_image(image):
     enhanced = clahe.apply(image)
     return enhanced
 
-# Function to apply K-Means clustering for image enhancement
+# Function to apply K-Means clustering (can help with segmentation)
 def enhance_image_kmeans(image, n_clusters=8):
-    """Applies K-Means clustering for image segmentation/enhancement."""
+    """Applies K-Means clustering."""
     pixel_values = image.reshape(-1, 1)
     unique_pixels = np.unique(pixel_values)
     actual_n_clusters = min(n_clusters, len(unique_pixels))
     if actual_n_clusters < n_clusters:
-        st.warning(f"Reduced number of clusters to {actual_n_clusters} due to limited unique pixel values.")
+        st.warning(f"Reduced clusters to {actual_n_clusters}.")
     if actual_n_clusters < 2:
-        st.error("Image has too few unique pixel values for clustering.")
+        st.error("Too few unique pixels for clustering.")
         return image
-    kmeans = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init=10) # Set n_init
+    kmeans = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init=10)
     kmeans.fit(pixel_values)
     labels = kmeans.labels_
     centers = kmeans.cluster_centers_
@@ -46,64 +45,63 @@ def enhance_image_kmeans(image, n_clusters=8):
 
 # Function to blend original and clustered image
 def blend_images(original, clustered, alpha=0.7):
-    """Blends the original and clustered images."""
+    """Blends images."""
     original = original.astype(np.float32)
     clustered = clustered.astype(np.float32)
     blended = alpha * clustered + (1 - alpha) * original
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
-# Function to detect feature lines using Canny edge detection
-def detect_feature_lines(image):
-    """Detects edges using Canny edge detection."""
-    edges = cv2.Canny(image, 80, 200)
+# --- NEW FUNCTION: Segment and Color Spaces ---
+def segment_and_color_spaces(enhanced_img, binarization_threshold, narrow_distance_threshold):
+    """Segments image, finds spaces, and colors them based on width."""
+
+    # 1. Binarization: Separate bones (white) from spaces (black)
+    # This is a CRITICAL step. Otsu tries to find an optimal threshold automatically.
+    # You might need to use the manual `binarization_threshold` or
+    # even `cv2.adaptiveThreshold` for better results.
+    # _, binary_img = cv2.threshold(enhanced_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, binary_img = cv2.threshold(enhanced_img, binarization_threshold, 255, cv2.THRESH_BINARY)
+
+    # 2. Morphology: Clean up the binary image (optional, tune as needed)
     kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=2)
-    return edges
+    # Opening: Remove small noise/islands (potential false spaces)
+    binary_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=2)
+    # Closing: Fill small holes in bones
+    binary_img = cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-# Function to overlay feature boxes with color-coded labels
-def overlay_feature_boxes(enhanced_img, feature_lines, narrow_threshold=10):
-    """Finds contours, measures width, and draws color-coded boxes."""
+    # 3. Invert for Distance Transform (Spaces = white = 255)
+    spaces_img = cv2.bitwise_not(binary_img)
+
+    # 4. Distance Transform: Calculate distance from each space pixel to nearest bone
+    dist_transform = cv2.distanceTransform(spaces_img, cv2.DIST_L2, 5)
+
+    # 5. Create Color Overlay
     enhanced_rgb = cv2.cvtColor(enhanced_img, cv2.COLOR_GRAY2RGB)
-    contours, _ = cv2.findContours(feature_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    overlay = np.zeros_like(enhanced_rgb, dtype=np.uint8)
 
-    count = 0
-    for contour in contours:
-        # Filter out small contours (noise) - adjust 100 as needed
-        if cv2.contourArea(contour) > 100:
-            count += 1
-            x, y, w, h = cv2.boundingRect(contour)
+    # Find where distance is below threshold (critical) - exclude 0 distance (bones)
+    critical_mask = (dist_transform > 0) & (dist_transform < narrow_distance_threshold)
+    # Find where distance is above or equal (normal)
+    normal_mask = (dist_transform >= narrow_distance_threshold)
 
-            # --- Color-Coding Logic ---
-            # Use the smaller dimension as a proxy for "narrowness"
-            min_dimension = min(w, h)
+    # Apply colors (BGR format)
+    overlay[normal_mask] = [255, 0, 0]  # Blue for Normal
+    overlay[critical_mask] = [0, 0, 255]  # Red for Critical
 
-            if min_dimension < narrow_threshold:
-                color = (0, 0, 255)  # Red for Critical (BGR)
-                label = "Critical"
-            else:
-                color = (255, 0, 0)  # Blue for Normal (BGR)
-                label = "Normal"
-            # --- End Color-Coding Logic ---
+    # 6. Blend the overlay with the enhanced image
+    alpha = 0.6  # Transparency - adjust as needed
+    final_img = cv2.addWeighted(overlay, alpha, enhanced_rgb, 1 - alpha, 0)
 
-            # Draw the bounding box
-            cv2.rectangle(enhanced_rgb, (x, y), (x + w, y + h), color, 2)
+    # Optionally, draw bone contours for clarity
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(final_img, contours, -1, (220, 220, 220), 1) # Light gray outlines
 
-            # Add the label
-            label_text = f"{label} {count}"
-            text_pos_x = x
-            text_pos_y = y - 10
-            # Ensure text is within image bounds
-            if text_pos_y < 10:
-                text_pos_y = y + h + 20
-
-            cv2.putText(enhanced_rgb, label_text, (text_pos_x, text_pos_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
-
-    return enhanced_rgb
+    # Return the binary mask too, for debugging/understanding
+    return final_img, binary_img, dist_transform
 
 # Process a single image and return all stages
-def process_image(image, n_clusters, optimize_large_images, narrow_threshold):
+def process_image(image, n_clusters, optimize_large_images, binarization_threshold, narrow_distance_threshold):
     """Processes a single image through all stages."""
     img_array = np.array(image.convert('L'))
     if img_array.dtype != np.uint8:
@@ -116,27 +114,40 @@ def process_image(image, n_clusters, optimize_large_images, narrow_threshold):
     preprocessed_img = preprocess_image(img_array)
     clustered_img = enhance_image_kmeans(preprocessed_img, n_clusters)
     enhanced_img = blend_images(preprocessed_img, clustered_img, alpha=0.7)
-    feature_lines_edges = detect_feature_lines(enhanced_img)
-    # Pass narrow_threshold to the overlay function
-    final_img_with_boxes = overlay_feature_boxes(enhanced_img, feature_lines_edges, narrow_threshold)
-    return original_img, preprocessed_img, enhanced_img, final_img_with_boxes
+
+    # Call the new function
+    final_img_with_spaces, binary_debug, dist_debug = segment_and_color_spaces(
+        enhanced_img, binarization_threshold, narrow_distance_threshold
+    )
+
+    return original_img, enhanced_img, binary_debug, final_img_with_spaces
+
 
 # --- Streamlit app ---
 st.set_page_config(layout="wide")
-st.title("X-ray Image Enhancement & Gap/Distance Analysis")
+st.title("X-ray Image Enhancement & Inter-Bone Space Analysis")
 
 # Sidebar for controls
 st.sidebar.title("Controls")
 uploaded_file = st.sidebar.file_uploader("Upload X-ray Image(s) (JPG/PNG/ZIP)", type=["jpg", "png", "zip"])
-n_clusters = st.sidebar.slider("Number of Clusters (K-Means)", min_value=2, max_value=12, value=8)
+n_clusters = st.sidebar.slider("Number of Clusters (K-Means)", min_value=2, max_value=12, value=4, help="Adjusts K-Means enhancement, can aid segmentation.")
 
-# Add the new slider for narrow threshold
-narrow_threshold = st.sidebar.slider(
-    "Critical Width Threshold (pixels)",
-    min_value=1, max_value=50, value=10,
-    help="Regions with a minimum dimension below this value will be 'Critical' (Red), others 'Normal' (Blue)."
+# --- NEW SLIDERS ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("Space Analysis Settings")
+binarization_threshold = st.sidebar.slider(
+    "Binarization Threshold (Bone Intensity)",
+    min_value=1, max_value=254, value=128,
+    help="Pixels above this value are considered 'Bone'. Adjust this to correctly separate bones from spaces."
 )
+narrow_distance_threshold = st.sidebar.slider(
+    "Critical Distance Threshold (pixels)",
+    min_value=1, max_value=50, value=5,
+    help="Spaces narrower than this (in pixels) will be 'Critical' (Red)."
+)
+# --- END NEW SLIDERS ---
 
+st.sidebar.markdown("---")
 optimize_large_images = st.sidebar.checkbox("Optimize for Large Images", value=True)
 if optimize_large_images:
     st.sidebar.info("Resizes images >1000px for faster processing.")
@@ -147,11 +158,8 @@ if uploaded_file is not None:
     image_names = []
     temp_dir = 'temp_images'
 
-    # Ensure temp dir is clean before use
-    if os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir)
+    if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
 
-    # Process uploads
     if uploaded_file.name.endswith('.zip'):
         try:
             os.makedirs(temp_dir)
@@ -160,45 +168,38 @@ if uploaded_file is not None:
             image_files = [os.path.join(temp_dir, f) for f in os.listdir(temp_dir) if f.lower().endswith(('.jpg', '.png'))]
             images_to_process = [Image.open(f) for f in image_files]
             image_names = [os.path.basename(f) for f in image_files]
-            if not images_to_process:
-                st.error("No valid JPG or PNG images found in the ZIP file.")
-        except zipfile.BadZipFile:
-            st.error("The uploaded file is not a valid ZIP archive.")
-        except Exception as e:
-            st.error(f"An error occurred while processing the ZIP file: {e}")
+            if not images_to_process: st.error("No valid images found in ZIP.")
+        except Exception as e: st.error(f"ZIP error: {e}")
     else:
         try:
             images_to_process = [Image.open(uploaded_file)]
             image_names = [uploaded_file.name]
-        except Exception as e:
-            st.error(f"An error occurred while opening the image: {e}")
+        except Exception as e: st.error(f"Image open error: {e}")
 
-    # Process and display images if any were loaded
     if images_to_process:
         with st.spinner("Processing images..."):
             for i, (image, name) in enumerate(zip(images_to_process, image_names)):
                 st.markdown(f"---")
                 st.write(f"### Processing: {name}")
                 try:
-                    # Pass narrow_threshold to process_image
-                    original_img, preprocessed_img, enhanced_img, final_img_with_boxes = process_image(image, n_clusters, optimize_large_images, narrow_threshold)
+                    original_img, enhanced_img, binary_debug, final_img_with_spaces = process_image(
+                        image, n_clusters, optimize_large_images, binarization_threshold, narrow_distance_threshold
+                    )
 
                     st.subheader(f"Processing Stages for {name}")
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.image(original_img, caption="1. Original", use_column_width=True)
                     with col2:
-                        st.image(preprocessed_img, caption="2. Preprocessed (CLAHE)", use_column_width=True)
+                        st.image(enhanced_img, caption="2. Enhanced", use_column_width=True)
                     with col3:
-                        st.image(enhanced_img, caption="3. Enhanced (K-Means)", use_column_width=True)
+                        st.image(binary_debug, caption="3. Bone Segmentation (Debug)", use_column_width=True)
                     with col4:
-                        st.image(final_img_with_boxes, caption="4. Final with Color-Coded Boxes", use_column_width=True)
+                        st.image(final_img_with_spaces, caption="4. Final with Color-Coded Spaces", use_column_width=True)
                 except Exception as e:
                     st.error(f"Failed to process {name}: {e}")
-                    st.image(np.array(image.convert('L')), caption=f"Original {name} (Processing Failed)", use_column_width=True)
+                    st.image(np.array(image.convert('L')), caption=f"Original {name} (Failed)", use_column_width=True)
 
-        # Clean up temp_images after processing
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
+        if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
 else:
     st.info("Please upload an X-ray image or a ZIP file to begin.")
