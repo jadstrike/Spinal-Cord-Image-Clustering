@@ -7,6 +7,7 @@ import io
 import zipfile
 import pandas as pd
 import os
+import base64
 
 # Function to resize large images while preserving aspect ratio
 def resize_image(image, max_size=1000):
@@ -19,7 +20,6 @@ def resize_image(image, max_size=1000):
 
 # Function to preprocess the image with CLAHE
 def preprocess_image(image):
-    # Apply CLAHE for adaptive contrast enhancement
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(image)
     return enhanced
@@ -42,36 +42,57 @@ def blend_images(original, clustered, alpha=0.7):
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
+# Function to convert image to bytes for download
+def image_to_bytes(image):
+    img_pil = Image.fromarray(image)
+    buf = io.BytesIO()
+    img_pil.save(buf, format="PNG")
+    return buf.getvalue()
+
 # Process a single image and return all stages
 def process_image(image, n_clusters, optimize_large_images):
     img_array = np.array(image.convert('L'))
     if img_array.dtype != np.uint8:
         img_array = img_array.astype(np.uint8)
-    original_img = img_array.copy()  # Store original image
+    original_img = img_array.copy()
     if optimize_large_images:
         original_img = resize_image(original_img, max_size=1000)
         img_array = resize_image(img_array, max_size=1000)
-    # Preprocessed image
     preprocessed_img = preprocess_image(img_array)
-    # Enhanced image using K-Means
     clustered_img = enhance_image_kmeans(preprocessed_img, n_clusters)
-    # Blend the clustered image with the preprocessed image
     enhanced_img = blend_images(preprocessed_img, clustered_img, alpha=0.7)
     return original_img, preprocessed_img, enhanced_img
 
 # Streamlit app
-st.title("X-ray Image Enhancement with K-Means Clustering")
+st.set_page_config(page_title="X-ray Image Enhancer", layout="wide")
 
-# File uploader
-uploaded_file = st.file_uploader("Upload an X-ray image or a ZIP file containing X-ray images (JPG/PNG)", type=["jpg", "png", "zip"])
+# Custom CSS for improved styling
+st.markdown("""
+    <style>
+    .main { padding: 20px; }
+    .stButton>button { background-color: #4CAF50; color: white; border-radius: 5px; }
+    .stSlider { margin-bottom: 20px; }
+    .stCheckbox { margin-bottom: 20px; }
+    .image-container { text-align: center; }
+    .caption { font-size: 14px; color: #555; margin-top: 5px; }
+    .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; }
+    .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
+    </style>
+""", unsafe_allow_html=True)
 
-# Number of clusters input
-n_clusters = st.slider("Number of Clusters", min_value=2, max_value=12, value=8)
+# Sidebar for controls
+with st.sidebar:
+    st.header("X-ray Image Enhancer")
+    st.markdown("Upload an X-ray image or a ZIP file and adjust settings to enhance images.")
+    uploaded_file = st.file_uploader("Upload X-ray Image or ZIP (JPG/PNG)", type=["jpg", "png", "zip"], help="Upload a single image or a ZIP file containing multiple X-ray images.")
+    n_clusters = st.slider("Number of Clusters", min_value=2, max_value=12, value=8, help="Adjust the number of clusters for K-Means clustering.")
+    optimize_large_images = st.checkbox("Optimize for Large Images", value=False, help="Resize large images to speed up processing while preserving quality.")
+    if optimize_large_images:
+        st.info("Images will be resized to a maximum dimension of 1000 pixels.")
 
-# Option to optimize for large images
-optimize_large_images = st.checkbox("Optimize for Large Images (faster processing)", value=False)
-if optimize_large_images:
-    st.info("Images will be resized to a maximum dimension of 1000 pixels to improve performance while preserving quality.")
+# Main content
+st.markdown('<div class="header">X-ray Image Enhancement with K-Means Clustering</div>', unsafe_allow_html=True)
+st.markdown("Enhance X-ray images using CLAHE and K-Means clustering for better visualization.")
 
 if uploaded_file is not None:
     # Check if the uploaded file is a ZIP file
@@ -86,18 +107,43 @@ if uploaded_file is not None:
         image_names = ["Uploaded Image"]
     
     # Process and display images
-    with st.spinner("Enhancing images..."):
-        for i, (image, name) in enumerate(zip(images_to_process, image_names)):
-            st.write(f"Processing {name}...")
+    progress_bar = st.progress(0)
+    for i, (image, name) in enumerate(zip(images_to_process, image_names)):
+        st.markdown(f'<div class="subheader">Processing: {name}</div>', unsafe_allow_html=True)
+        with st.spinner(f"Enhancing {name}..."):
             original_img, preprocessed_img, enhanced_img = process_image(image, n_clusters, optimize_large_images)
-            # Display final summary in one line
-            st.subheader(f"Summary: All Stages for {name}")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.image(original_img, caption="Original", width=None)
-            with col2:
-                st.image(preprocessed_img, caption="Preprocessed", width=None)
-            with col3:
-                st.image(enhanced_img, caption="Enhanced", width=None)
+        
+        # Display images in columns
+        cols = st.columns(3)
+        with cols[0]:
+            st.markdown('<div class="image-container">', unsafe_allow_html=True)
+            st.image(original_img, use_column_width=True)
+            st.markdown('<div class="caption">Original Image</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        with cols[1]:
+            st.markdown('<div class="image-container">', unsafe_allow_html=True)
+            st.image(preprocessed_img, use_column_width=True)
+            st.markdown('<div class="caption">Preprocessed (CLAHE)</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        with cols[2]:
+            st.markdown('<div class="image-container">', unsafe_allow_html=True)
+            st.image(enhanced_img, use_column_width=True)
+            st.markdown('<div class="caption">Enhanced (K-Means)</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Download button for enhanced image
+        enhanced_bytes = image_to_bytes(enhanced_img)
+        st.download_button(
+            label=f"Download Enhanced {name}",
+            data=enhanced_bytes,
+            file_name=f"enhanced_{name}",
+            mime="image/png",
+            help="Download the enhanced image as a PNG file."
+        )
+        
+        # Update progress bar
+        progress_bar.progress((i + 1) / len(images_to_process))
+    
+    st.success("Image processing completed!")
 else:
-    st.info("Please upload an X-ray image or a ZIP file containing X-ray images to begin.")
+    st.info("Please upload an X-ray image or a ZIP file to start enhancing.")
