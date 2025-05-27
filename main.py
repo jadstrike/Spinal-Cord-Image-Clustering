@@ -20,7 +20,7 @@ def resize_image(image, max_size=1000):
 
 # Function to preprocess the image with CLAHE
 def preprocess_image(image):
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(image)
     return enhanced
 
@@ -43,21 +43,22 @@ def blend_images(original, clustered, alpha=0.7):
     return blended
 
 # Function to detect spaces between bones (disc spaces)
-def detect_disc_spaces(image, min_space_height=5, max_space_height=20):
-    # Preprocess for better segmentation
+def detect_disc_spaces(image, min_space_height=10, max_space_height=40):
+    # Enhance contrast and reduce noise
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    binary = cv2.bitwise_not(binary)
-    # Morphological operations to close gaps in bones
-    kernel = np.ones((5, 5), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+    # Adaptive thresholding for better bone segmentation
+    binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 3)
+    # Morphological operations to connect bone structures
+    kernel = np.ones((7, 7), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=3)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
     
-    # Edge detection
-    edges = cv2.Canny(blurred, 50, 150)
-    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+    # Edge detection with adjusted parameters
+    edges = cv2.Canny(blurred, 20, 80)
+    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=2)
     
     # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     spaces = []
     
     # Sort contours by y-coordinate for vertical analysis
@@ -68,14 +69,16 @@ def detect_disc_spaces(image, min_space_height=5, max_space_height=20):
         x1, y1, w1, h1 = cv2.boundingRect(contours[i])
         x2, y2, w2, h2 = cv2.boundingRect(contours[i + 1])
         
-        # Check vertical alignment and gap size
-        if abs(x1 - x2) < max(w1, w2) * 0.5 and y2 > y1 + h1:
+        # Allow for some horizontal offset due to spine curvature
+        if abs(x1 - x2) < max(w1, w2) * 1.5 and y2 > y1 + h1:
             space_height = y2 - (y1 + h1)
             if min_space_height < space_height < max_space_height:
                 y_space = y1 + h1 + space_height // 2
-                x_start = max(x1, x2)
-                x_end = min(x1 + w1, x2 + w2)
-                spaces.append((y_space, x_start, x_end, space_height))
+                x_start = min(x1, x2)
+                x_end = max(x1 + w1, x2 + w2)
+                # Ensure the space spans a reasonable width
+                if x_end - x_start > min(w1, w2) * 0.5:
+                    spaces.append((y_space, x_start, x_end, space_height))
     
     return spaces
 
@@ -83,8 +86,8 @@ def detect_disc_spaces(image, min_space_height=5, max_space_height=20):
 def overlay_disc_spaces(image, spaces):
     img_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
     for y, x_start, x_end, space_height in spaces:
-        color = (0, 255, 255) if space_height > 10 else (255, 0, 0)  # Cyan for normal, red for narrowed
-        thickness = 2
+        color = (0, 255, 255) if space_height > 20 else (255, 0, 0)  # Cyan for wider, red for narrower
+        thickness = 3
         cv2.line(img_rgb, (x_start, y), (x_end, y), color, thickness)
     return img_rgb
 
@@ -134,6 +137,7 @@ st.markdown("""
     .caption { font-size: 16px; color: #000; margin-top: 5px; font-weight: 800; }
     .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; }
     .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
+    .status { font-size: 14px; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -146,6 +150,11 @@ with st.sidebar:
     optimize_large_images = st.checkbox("Optimize for Large Images", value=False, help="Resize large images to speed up processing while preserving quality.")
     if optimize_large_images:
         st.info("Images will be resized to a maximum dimension of 1000 pixels.")
+    # Feature toggle
+    if "enable_disc_space_feature" not in st.session_state:
+        st.session_state["enable_disc_space_feature"] = True
+    enable_disc_space = st.checkbox("Enable Disc Space Detection", value=st.session_state["enable_disc_space_feature"], help="Toggle to enable or disable the disc space detection feature.")
+    st.session_state["enable_disc_space_feature"] = enable_disc_space
 
 # Main content
 st.markdown('<div class="header">X-ray Image Enhancement with K-Means Clustering</div>', unsafe_allow_html=True)
@@ -192,22 +201,27 @@ if uploaded_file is not None:
             if f"show_spaces_{i}" not in st.session_state:
                 st.session_state[f"show_spaces_{i}"] = False
             placeholder = st.empty()
-            if st.session_state[f"show_spaces_{i}"]:
-                spaces = detect_disc_spaces(enhanced_img)
-                if spaces:
-                    enhanced_with_spaces = overlay_disc_spaces(enhanced_img, spaces)
-                    placeholder.image(enhanced_with_spaces, use_column_width=True)
+            status_placeholder = st.empty()  # Placeholder for status message
+            if st.session_state["enable_disc_space_feature"]:
+                if st.session_state[f"show_spaces_{i}"]:
+                    spaces = detect_disc_spaces(enhanced_img)
+                    if spaces:
+                        enhanced_with_spaces = overlay_disc_spaces(enhanced_img, spaces)
+                        placeholder.image(enhanced_with_spaces, use_column_width=True, channels="RGB")
+                        status_placeholder.markdown(f'<div class="status">Detected {len(spaces)} disc spaces (cyan: normal, red: narrowed).</div>', unsafe_allow_html=True)
+                    else:
+                        placeholder.image(enhanced_img, use_column_width=True)
+                        status_placeholder.warning("No disc spaces detected. Try adjusting the image contrast or parameters.")
                 else:
-                    st.warning("No disc spaces detected. Try adjusting the image or parameters.")
                     placeholder.image(enhanced_img, use_column_width=True)
+                    status_placeholder.markdown('<div class="status">Click the button to detect disc spaces.</div>', unsafe_allow_html=True)
+                if st.button(f"Show Detected Spaces Between Bones for {name}", key=f"disc_space_btn_{i}"):
+                    st.session_state[f"show_spaces_{i}"] = not st.session_state[f"show_spaces_{i}"]
             else:
                 placeholder.image(enhanced_img, use_column_width=True)
+                status_placeholder.markdown('<div class="status">Disc space detection is disabled.</div>', unsafe_allow_html=True)
             st.markdown('<div class="caption">Enhanced (K-Means)</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Button to toggle disc space visualization
-        if st.button(f"Show Detected Spaces Between Bones for {name}", key=f"disc_space_btn_{i}"):
-            st.session_state[f"show_spaces_{i}"] = not st.session_state[f"show_spaces_{i}"]
         
         # Download button for individual enhanced image
         enhanced_bytes = image_to_bytes(enhanced_img)
