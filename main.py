@@ -99,7 +99,7 @@ def process_image(image, n_clusters, optimize_large_images):
     # Detect and label fracture lines
     fracture_lines, num_labels, fracture_labels, stats, centroids = detect_and_label_fracture_lines(enhanced_img)
     final_img_with_fractures = overlay_fracture_lines(enhanced_img, fracture_lines, num_labels, fracture_labels, stats, centroids)
-    return original_img, preprocessed_img, enhanced_img, final_img_with_fractures
+    return original_img, preprocessed_img, final_img_with_fractures
 
 # Streamlit app
 st.title("X-ray Image Enhancement with K-Means Clustering (Fracture Line Detection)")
@@ -131,11 +131,15 @@ if uploaded_file is not None:
     with st.spinner("Enhancing images and detecting fracture lines..."):
         for i, (image, name) in enumerate(zip(images_to_process, image_names)):
             st.write(f"Processing {name}...")
-            original_img, preprocessed_img, enhanced_img, final_img_with_fractures = process_image(image, n_clusters, optimize_large_images)
-            # Display all stages
-            st.image(original_img, caption=f"Original {name}", width=None)
-            st.image(preprocessed_img, caption=f"Preprocessed {name}", width=None)
-            st.image(enhanced_img, caption=f"Enhanced {name} (Before Labeling)", width=None)
-            st.image(final_img_with_fractures, caption=f"Enhanced {name} with Labeled Fracture Lines", width=None)
+            original_img, preprocessed_img, final_img_with_fractures = process_image(image, n_clusters, optimize_large_images)
+            # Display final summary in one line
+            st.subheader(f"Summary: All Stages for {name}")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.image(original_img, caption="Original", width=None)
+            with col2:
+                st.image(preprocessed_img, caption="Preprocessed", width=None)
+            with col3:
+                st.image(final_img_with_fractures, caption="Final Enhanced with Labeled Fracture Lines", width=None)
 else:
     st.info("Please upload an X-ray image or a ZIP file containing X-ray images to begin.")
