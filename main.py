@@ -42,6 +42,51 @@ def blend_images(original, clustered, alpha=0.7):
     blended = cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     return blended
 
+# Function to detect spaces between bones (disc spaces)
+def detect_disc_spaces(image, min_space_height=5, max_space_height=20):
+    # Convert to binary image for segmentation
+    _, binary = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Invert binary image (bones are white, spaces are black)
+    binary = cv2.bitwise_not(binary)
+    # Use Canny edge detection to find bone edges
+    edges = cv2.Canny(image, 50, 150)
+    # Dilate edges to connect small gaps
+    kernel = np.ones((3, 3), np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations=1)
+    
+    # Find contours of the bones
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    spaces = []
+    
+    # Analyze gaps between contours (potential disc spaces)
+    for i in range(len(contours) - 1):
+        # Get bounding boxes of consecutive contours
+        x1, y1, w1, h1 = cv2.boundingRect(contours[i])
+        x2, y2, w2, h2 = cv2.boundingRect(contours[i + 1])
+        
+        # Check if contours are vertically aligned (potential disc space)
+        if abs(x1 - x2) < max(w1, w2) * 0.5:  # Ensure some overlap in x-axis
+            space_height = y2 - (y1 + h1)
+            if min_space_height < space_height < max_space_height:
+                # Calculate the y-position and width of the space
+                y_space = y1 + h1 + space_height // 2
+                x_start = max(x1, x2)
+                x_end = min(x1 + w1, x2 + w2)
+                spaces.append((y_space, x_start, x_end, space_height))
+    
+    return spaces
+
+# Function to overlay detected spaces on the image
+def overlay_disc_spaces(image, spaces):
+    # Convert to RGB for coloring
+    img_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    for y, x_start, x_end, space_height in spaces:
+        # Color based on space height (narrowed vs normal)
+        color = (0, 255, 255) if space_height > 10 else (255, 0, 0)  # Cyan for normal, red for narrowed
+        thickness = 2
+        cv2.line(img_rgb, (x_start, y), (x_end, y), color, thickness)
+    return img_rgb
+
 # Function to convert image to bytes
 def image_to_bytes(image):
     img_pil = Image.fromarray(image)
@@ -77,7 +122,7 @@ def process_image(image, n_clusters, optimize_large_images):
 # Streamlit app
 st.set_page_config(page_title="X-ray Image Enhancer", layout="wide")
 
-# Custom CSS for improved styling with bolder captions
+# Custom CSS for improved styling with even bolder captions
 st.markdown("""
     <style>
     .main { padding: 20px; }
@@ -85,7 +130,7 @@ st.markdown("""
     .stSlider { margin-bottom: 20px; }
     .stCheckbox { margin-bottom: 20px; }
     .image-container { text-align: center; }
-    .caption { font-size: 14px; color: #333; margin-top: 5px; font-weight: 700; }
+    .caption { font-size: 16px; color: #000; margin-top: 5px; font-weight: 800; }
     .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; }
     .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
     </style>
@@ -142,9 +187,17 @@ if uploaded_file is not None:
             st.markdown('</div>', unsafe_allow_html=True)
         with cols[2]:
             st.markdown('<div class="image-container">', unsafe_allow_html=True)
-            st.image(enhanced_img, use_column_width=True)
+            # Placeholder for the enhanced image (to be updated with spaces if toggled)
+            placeholder = st.empty()
+            placeholder.image(enhanced_img, use_column_width=True)
             st.markdown('<div class="caption">Enhanced (K-Means)</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Button to toggle disc space visualization
+        if st.button(f"Show Detected Spaces Between Bones for {name}", key=f"disc_space_{i}"):
+            spaces = detect_disc_spaces(enhanced_img)
+            enhanced_with_spaces = overlay_disc_spaces(enhanced_img, spaces)
+            placeholder.image(enhanced_with_spaces, use_column_width=True)
         
         # Download button for individual enhanced image
         enhanced_bytes = image_to_bytes(enhanced_img)
