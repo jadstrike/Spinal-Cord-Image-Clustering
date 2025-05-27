@@ -22,16 +22,22 @@ def preprocess_image(image):
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     return clahe.apply(image)
 
-# K-Means enhancement
+# K-Means enhancement - FIXED VERSION
 def enhance_image_kmeans(image, n_clusters=8):
     pixel_values = image.reshape(-1, 1)
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)
     kmeans.fit(pixel_values)
-    return centers[kmeans.labels_].reshape(image.shape).astype(np.uint8)
+    labels = kmeans.labels_
+    centers = kmeans.cluster_centers_
+    segmented_pixels = centers[labels].reshape(image.shape)
+    return cv2.normalize(segmented_pixels, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
 # Image blending
 def blend_images(original, clustered, alpha=0.7):
-    return cv2.addWeighted(clustered, alpha, original, 1-alpha, 0)
+    original = original.astype(np.float32)
+    clustered = clustered.astype(np.float32)
+    blended = alpha * clustered + (1 - alpha) * original
+    return cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
 # Enhanced disc space detection
 def detect_disc_spaces(image):
@@ -106,6 +112,21 @@ def image_to_bytes(image):
 
 # Streamlit UI
 st.set_page_config(page_title="Spine Analyzer", layout="wide")
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .main { padding: 20px; }
+    .stButton>button { background-color: #4CAF50; color: white; border-radius: 5px; }
+    .stSlider { margin-bottom: 20px; }
+    .stCheckbox { margin-bottom: 20px; }
+    .image-container { text-align: center; }
+    .caption { font-size: 16px; color: #000; margin-top: 5px; font-weight: 800; }
+    .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; }
+    .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
+    .status { font-size: 14px; margin-top: 10px; }
+    </style>
+""", unsafe_allow_html=True)
 
 st.sidebar.header("Settings")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png"])
