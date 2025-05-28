@@ -291,10 +291,7 @@ st.markdown("""
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
 n_clusters = st.sidebar.slider("Number of Clusters", 2, 12, 8)
-enable_detection = st.sidebar.checkbox("Enable disc space detection", False)
-detection_method = None
-if enable_detection:
-    detection_method = st.sidebar.selectbox("Disc Space Detection Method", ["Classic", "OPTICS"], index=0)
+enable_detection = st.sidebar.checkbox("Enable disc space detection (OPTICS)", False)
 
 st.title("Spinal Cord Image Clustering and Analysis")
 
@@ -315,11 +312,9 @@ if uploaded_file:
         'Enhanced': image_to_base64(enhanced)
     }
     if enable_detection:
-        if detection_method == "OPTICS":
-            spaces, overlaid = detect_disc_spaces_optics(enhanced)
-        else:
-            spaces = detect_disc_spaces(enhanced)
-            overlaid = overlay_spaces(enhanced, spaces)
+        # Use the original uploaded image (color) for OPTICS
+        orig_color = np.array(Image.open(uploaded_file).convert('RGB'))
+        spaces, overlaid = detect_disc_spaces_optics(orig_color)
         images_dict['Analysis'] = image_to_base64(overlaid)
     
     # Prepare ZIP for download
@@ -355,13 +350,8 @@ if uploaded_file:
         st.markdown('</div>', unsafe_allow_html=True)
     with col3:
         if enable_detection:
-            if detection_method == "OPTICS":
-                st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
-            else:
-                data = [[f"Space {i+1}", s['type'], f"{s['height']:.1f}px", f"{s['width']:.1f}px"] 
-                       for i,s in enumerate(spaces)]
-                st.table(pd.DataFrame(data, columns=["Space", "Type", "Height", "Width"]))
-            st.image(overlaid, caption="Disc Space Analysis", use_column_width=True)
+            st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
+            st.image(overlaid, caption="Disc Space Analysis (OPTICS)", use_column_width=True)
             st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
             st.download_button(
                 label="Download Analysis Image",
@@ -382,14 +372,5 @@ if uploaded_file:
                 key="download4"
             )
             st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Health score
-    if enable_detection and spaces:
-        with st.expander("Spine Health Score"):
-            normal_count = sum(1 for s in spaces if (s.get('type') == "Normal" or s.get('Type') == "Normal"))
-            score = (normal_count / len(spaces)) * 100 if len(spaces) > 0 else 100
-            st.metric("Spine Health Score", f"{score:.1f}%")
-            st.progress(int(score))
-            st.caption("Higher scores indicate better spinal health with more normal disc spaces")
 else:
     st.info("Please upload a spinal X-ray image to begin analysis")
