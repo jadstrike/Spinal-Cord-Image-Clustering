@@ -13,12 +13,29 @@ import base64
 
 st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
 
-# Custom CSS for gradient sidebar background
+# Custom CSS for gradient sidebar background and download button color
 st.markdown(
     """
     <style>
     [data-testid="stSidebar"] {
         background: linear-gradient(135deg, #007BFF 0%, #6BCBFF 100%) !important;
+    }
+    .stDownloadButton > button {
+        background-color: #007BFF !important;
+        color: white !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        border: none !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        display: block !important;
+        max-width: 350px !important;
+        width: 100% !important;
+        transition: background 0.2s;
+    }
+    .stDownloadButton > button:hover {
+        background-color: #0056b3 !important;
+        color: #fff !important;
     }
     </style>
     """,
@@ -285,7 +302,14 @@ if uploaded_file:
     col1, col2, col3 = st.columns(3)
     with col1:
         st.image(img_array, caption="Original", use_column_width=True)
-        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+    with col2:
+        st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
+    with col3:
+        st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
+
+    # Centered download buttons under each image
+    col1, col2, col3 = st.columns(3)
+    with col1:
         st.download_button(
             label="Download Original Image",
             data=image_to_base64(img_array),
@@ -293,10 +317,7 @@ if uploaded_file:
             mime="image/png",
             key="download1"
         )
-        st.markdown('</div>', unsafe_allow_html=True)
     with col2:
-        st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
-        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
         st.download_button(
             label="Download Preprocessed Image",
             data=image_to_base64(processed),
@@ -304,10 +325,7 @@ if uploaded_file:
             mime="image/png",
             key="download2"
         )
-        st.markdown('</div>', unsafe_allow_html=True)
     with col3:
-        st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
-        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
         st.download_button(
             label="Download Enhanced Image",
             data=image_to_base64(enhanced),
@@ -315,7 +333,6 @@ if uploaded_file:
             mime="image/png",
             key="download4"
         )
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # Below: Disc space detection (OPTICS) result
     if enable_detection:
