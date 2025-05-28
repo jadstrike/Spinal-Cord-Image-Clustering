@@ -263,94 +263,162 @@ def image_to_base64(image_array):
     byte_im = buf.getvalue()
     return base64.b64encode(byte_im).decode('utf-8')
 
+# Track which image is clicked for full view
+if "full_image" not in st.session_state:
+    st.session_state.full_image = None
+if "full_image_caption" not in st.session_state:
+    st.session_state.full_image_caption = None
+
+# Show full image in the center if set
+if st.session_state.full_image is not None:
+    st.markdown("""
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh;">
+    """, unsafe_allow_html=True)
+    st.image(st.session_state.full_image, use_column_width=False, caption=st.session_state.full_image_caption)
+    st.markdown("""
+        </div>
+    """, unsafe_allow_html=True)
+    if st.button("Close Full Image", key="close_full_image", help="Close the full image view"):
+        st.session_state.full_image = None
+        st.session_state.full_image_caption = None
+    st.markdown("---")
+
 # Streamlit UI
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
 enable_detection = st.sidebar.checkbox("Enable disc space detection (OPTICS)", False)
+show_team = st.sidebar.checkbox("Show Team Info")
 
-st.title("Spinal Cord Image Clustering and Analysis")
-
-if uploaded_file:
-    image = Image.open(uploaded_file).convert('L')
-    img_array = np.array(image)
-    filename = os.path.splitext(uploaded_file.name)[0]
-    
-    # Processing pipeline
-    processed = preprocess_image(img_array)
-    clustered = enhance_image_kmeans(processed, 8)  # Use default 8 clusters
-    enhanced = blend_images(processed, clustered)
-    
-    # Prepare images for download
-    images_dict = {
-        'Original': image_to_base64(img_array),
-        'Preprocessed': image_to_base64(processed),
-        'Enhanced': image_to_base64(enhanced)
-    }
-    if enable_detection:
-        orig_color = np.array(Image.open(uploaded_file).convert('RGB'))
-        spaces, overlaid = detect_disc_spaces_optics(orig_color)
-        images_dict['Analysis'] = image_to_base64(overlaid)
-    
-    # Prepare ZIP for download
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for key, img_bytes in images_dict.items():
-            zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
-    zip_buffer.seek(0)
-    
-    # Display top row: Original, Preprocessed, Enhanced
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.image(img_array, caption="Original", use_column_width=True)
-    with col2:
-        st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
-    with col3:
-        st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
-
-    # Centered download buttons under each image
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.download_button(
-            label="Download Original Image",
-            data=image_to_base64(img_array),
-            file_name=f"{filename}_original.png",
-            mime="image/png",
-            key="download1"
-        )
-    with col2:
-        st.download_button(
-            label="Download Preprocessed Image",
-            data=image_to_base64(processed),
-            file_name=f"{filename}_preprocessed.png",
-            mime="image/png",
-            key="download2"
-        )
-    with col3:
-        st.download_button(
-            label="Download Enhanced Image",
-            data=image_to_base64(enhanced),
-            file_name=f"{filename}_enhanced.png",
-            mime="image/png",
-            key="download4"
-        )
-
-    # Below: Disc space detection (OPTICS) result
-    if enable_detection:
-        st.markdown("---")
-        st.subheader("Disc Space Detection (OPTICS)")
-        col_img, col_table = st.columns([1,1])
-        with col_img:
-            st.image(overlaid, caption="Disc Space Analysis (OPTICS)", width=400)
-            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
-            st.download_button(
-                label="Download Analysis Image",
-                data=image_to_base64(overlaid),
-                file_name=f"{filename}_analysis.png",
-                mime="image/png",
-                key="download3"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
-        with col_table:
-            st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
+# Layout: main content (left), team info (right if checked)
+if show_team:
+    main_col, team_col = st.columns([3, 1])
 else:
-    st.info("Please upload a spinal X-ray image to begin analysis")
+    main_col = st.container()
+    team_col = None
+
+with main_col:
+    st.title("Spinal Cord Image Clustering and Analysis")
+
+    if uploaded_file:
+        image = Image.open(uploaded_file).convert('L')
+        img_array = np.array(image)
+        filename = os.path.splitext(uploaded_file.name)[0]
+        
+        # Processing pipeline
+        processed = preprocess_image(img_array)
+        clustered = enhance_image_kmeans(processed, 8)  # Use default 8 clusters
+        enhanced = blend_images(processed, clustered)
+        
+        # Prepare images for download
+        images_dict = {
+            'Original': image_to_base64(img_array),
+            'Preprocessed': image_to_base64(processed),
+            'Enhanced': image_to_base64(enhanced)
+        }
+        if enable_detection:
+            orig_color = np.array(Image.open(uploaded_file).convert('RGB'))
+            spaces, overlaid = detect_disc_spaces_optics(orig_color)
+            images_dict['Analysis'] = image_to_base64(overlaid)
+        
+        # Prepare ZIP for download
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for key, img_bytes in images_dict.items():
+                zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
+        zip_buffer.seek(0)
+        
+        # Display top row: Original, Preprocessed, Enhanced
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.image(img_array, caption="Original", use_column_width=True)
+            if st.button("View Full Original", key="view_full_original"):
+                st.session_state.full_image = img_array
+                st.session_state.full_image_caption = "Original"
+        with col2:
+            st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
+            if st.button("View Full Preprocessed", key="view_full_preprocessed"):
+                st.session_state.full_image = processed
+                st.session_state.full_image_caption = "Preprocessed (CLAHE)"
+        with col3:
+            st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
+            if st.button("View Full Enhanced", key="view_full_enhanced"):
+                st.session_state.full_image = enhanced
+                st.session_state.full_image_caption = "Enhanced (K-Means)"
+
+        # Centered download buttons under each image
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.download_button(
+                label="Download Original Image",
+                data=image_to_base64(img_array),
+                file_name=f"{filename}_original.png",
+                mime="image/png",
+                key="download1"
+            )
+        with col2:
+            st.download_button(
+                label="Download Preprocessed Image",
+                data=image_to_base64(processed),
+                file_name=f"{filename}_preprocessed.png",
+                mime="image/png",
+                key="download2"
+            )
+        with col3:
+            st.download_button(
+                label="Download Enhanced Image",
+                data=image_to_base64(enhanced),
+                file_name=f"{filename}_enhanced.png",
+                mime="image/png",
+                key="download4"
+            )
+
+        # Below: Disc space detection (OPTICS) result
+        if enable_detection:
+            st.markdown("---")
+            st.subheader("Disc Space Detection (OPTICS)")
+            col_img, col_table = st.columns([1,1])
+            with col_img:
+                st.image(overlaid, caption="Disc Space Analysis (OPTICS)", width=400)
+                st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+                st.download_button(
+                    label="Download Analysis Image",
+                    data=image_to_base64(overlaid),
+                    file_name=f"{filename}_analysis.png",
+                    mime="image/png",
+                    key="download3"
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+            with col_table:
+                st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
+    else:
+        st.info("Please upload a spinal X-ray image to begin analysis")
+
+if show_team and team_col is not None:
+    with team_col:
+        st.markdown("---")
+        st.header("Meet the Team")
+        team = [
+            {
+                "name": "Alice Smith",
+                "role": "Lead Developer",
+                "img": "https://randomuser.me/api/portraits/women/44.jpg",
+                "bio": "Expert in medical imaging and AI."
+            },
+            {
+                "name": "Bob Lee",
+                "role": "Backend Engineer",
+                "img": "https://randomuser.me/api/portraits/men/32.jpg",
+                "bio": "Loves Python, FastAPI, and scalable systems."
+            },
+            {
+                "name": "Carol Tan",
+                "role": "UI/UX Designer",
+                "img": "https://randomuser.me/api/portraits/women/68.jpg",
+                "bio": "Passionate about beautiful, accessible design."
+            }
+        ]
+        for member in team:
+            st.image(member["img"], width=100)
+            st.subheader(member["name"])
+            st.caption(member["role"])
+            st.write(member["bio"])
