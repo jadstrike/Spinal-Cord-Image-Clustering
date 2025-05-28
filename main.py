@@ -374,17 +374,17 @@ if uploaded_file:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Improved: Background-to-Blue using flood fill from corners
-    flood_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    # Improved: Background-to-Blue using flood fill from corners (fixed)
     h, w = enhanced.shape
-    mask = np.zeros((h+2, w+2), np.uint8)
     flood_mask = np.zeros_like(enhanced, dtype=np.uint8)
-    # Flood fill from all four corners
-    for seed in [(0,0), (0,w-1), (h-1,0), (h-1,w-1)]:
+    seeds = [(0,0), (w-1,0), (0,h-1), (w-1,h-1)]  # (x, y) order
+    for seed in seeds:
         temp_img = enhanced.copy()
-        cv2.floodFill(temp_img, mask, seedPoint=seed, newVal=255, loDiff=10, upDiff=10)
-        flood_mask = cv2.bitwise_or(flood_mask, cv2.inRange(temp_img, 255, 255))
-    # Color only the background blue
+        mask = np.zeros((h+2, w+2), np.uint8)  # re-init for each call
+        x, y = seed
+        if 0 <= x < w and 0 <= y < h:
+            cv2.floodFill(temp_img, mask, seedPoint=(x, y), newVal=255, loDiff=10, upDiff=10)
+            flood_mask = cv2.bitwise_or(flood_mask, cv2.inRange(temp_img, 255, 255))
     improved_bg_blue_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
     improved_bg_blue_img[flood_mask == 255] = [0, 0, 255]
     st.markdown("<div style='text-align:center; margin-top:20px; margin-bottom:10px;'><b>Background Colored Blue (Flood Fill)</b></div>", unsafe_allow_html=True)
