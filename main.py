@@ -374,6 +374,32 @@ if uploaded_file:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # New: Background-to-Blue using segmentation
+    # Threshold to separate background
+    _, thresh = cv2.threshold(enhanced, 10, 255, cv2.THRESH_BINARY)
+    # Invert to get background mask
+    bg_mask = cv2.bitwise_not(thresh)
+    # Find contours and fill the largest (background)
+    contours, _ = cv2.findContours(bg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    bg_mask_filled = np.zeros_like(bg_mask)
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        cv2.drawContours(bg_mask_filled, [largest_contour], -1, 255, thickness=cv2.FILLED)
+    # Color only the background blue
+    bg_blue_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    bg_blue_img[bg_mask_filled == 255] = [0, 0, 255]
+    st.markdown("<div style='text-align:center; margin-top:20px; margin-bottom:10px;'><b>Background Colored Blue (Segmentation)</b></div>", unsafe_allow_html=True)
+    st.image(bg_blue_img, caption="Background Colored Blue (Segmentation)", width=400)
+    st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+    st.download_button(
+        label="Download Background-to-Blue Image",
+        data=image_to_base64(bg_blue_img),
+        file_name=f"{filename}_background_to_blue.png",
+        mime="image/png",
+        key="download6"
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # Below: Disc space detection (OPTICS) result
     if enable_detection:
         st.markdown("---")
