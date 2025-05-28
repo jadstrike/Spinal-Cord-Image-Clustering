@@ -184,6 +184,14 @@ st.markdown("""
       position: absolute; top: 30px; right: 50px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer;
       z-index: 10000;
     }
+    /* Center images in Streamlit's fullscreen modal */
+    .stModal img {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        max-width: 90vw;
+        max-height: 90vh;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -225,8 +233,8 @@ if uploaded_file:
     # Display results
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         st.image(img_array, caption="Original", use_column_width=True)
+        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
         st.download_button(
             label="Download Original Image",
             data=image_to_base64(img_array),
@@ -236,8 +244,8 @@ if uploaded_file:
         )
         st.markdown('</div>', unsafe_allow_html=True)
     with col2:
-        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
+        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
         st.download_button(
             label="Download Preprocessed Image",
             data=image_to_base64(processed),
@@ -247,9 +255,9 @@ if uploaded_file:
         )
         st.markdown('</div>', unsafe_allow_html=True)
     with col3:
-        st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         if enable_detection:
             st.image(overlaid, caption="Disc Space Analysis", use_column_width=True)
+            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
             st.download_button(
                 label="Download Analysis Image",
                 data=image_to_base64(overlaid),
@@ -257,8 +265,10 @@ if uploaded_file:
                 mime="image/png",
                 key="download3"
             )
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
+            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
             st.download_button(
                 label="Download Enhanced Image",
                 data=image_to_base64(enhanced),
@@ -266,7 +276,7 @@ if uploaded_file:
                 mime="image/png",
                 key="download4"
             )
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
     
     # Show measurements
     if enable_detection:
