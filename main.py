@@ -152,9 +152,22 @@ def overlay_spaces(image, spaces):
 
 # OPTICS-based disc space detection function
 def detect_disc_spaces_optics(image):
-    # image: should be a 2D numpy array (grayscale)
-    edges = cv2.Canny(image, 50, 150)
+    # image: should be a 2D or 3D numpy array (grayscale or color)
+    # If grayscale, convert to BGR for visualization
+    if len(image.shape) == 2:
+        color_img = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        gray = image
+    else:
+        color_img = image.copy()
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Edge detection
+    edges = cv2.Canny(gray, 50, 150)
+
+    # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Extract centroids of contours
     points = []
     for cnt in contours:
         M = cv2.moments(cnt)
@@ -162,39 +175,49 @@ def detect_disc_spaces_optics(image):
             cx = int(M['m10'] / M['m00'])
             cy = int(M['m01'] / M['m00'])
             points.append([cx, cy])
-    if len(points) < 2:
-        return [], image  # Not enough points for clustering
     points = np.array(points)
+
+    if len(points) < 2:
+        return [], color_img  # Not enough points for clustering
+
+    # Apply OPTICS clustering
     optics = OPTICS(min_samples=2, xi=0.05, min_cluster_size=0.05)
     labels = optics.fit_predict(points)
-    output = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    unique_labels = sorted(set(labels))
+
+    # Prepare visualization
+    output = color_img.copy()
+    unique_labels = sorted(set(labels))  # Sort for consistent coloring
     base_cmap = plt.colormaps.get_cmap("tab10")
     color_list = [base_cmap(i % 10) for i in range(len(unique_labels))]
+
     cluster_centers = []
     for label in unique_labels:
         if label == -1:
-            continue
+            continue  # Skip noise
         cluster_points = points[labels == label]
         center = np.mean(cluster_points, axis=0).astype(int)
         cluster_centers.append(center)
         color = color_list[label % len(color_list)]
         for pt in cluster_points:
             cv2.circle(output, tuple(pt), 3, (
-                int(color[0]*255), int(color[1]*255), int(color[2]*255)), -1)
-        cv2.circle(output, tuple(center), 6, (255,255,255), 2)
+                int(color[0] * 255),
+                int(color[1] * 255),
+                int(color[2] * 255)
+            ), -1)
+        cv2.circle(output, tuple(center), 6, (255, 255, 255), 2)
+
     # Sort centers vertically and calculate distances
-    cluster_centers.sort(key=lambda x: x[1])
+    cluster_centers.sort(key=lambda x: x[1])  # Sort by y-coordinate
     spaces = []
-    for i in range(len(cluster_centers)-1):
+    for i in range(len(cluster_centers) - 1):
         pt1 = tuple(cluster_centers[i])
-        pt2 = tuple(cluster_centers[i+1])
+        pt2 = tuple(cluster_centers[i + 1])
         dist = euclidean(pt1, pt2)
         mid_x = (pt1[0] + pt2[0]) // 2
         mid_y = (pt1[1] + pt2[1]) // 2
-        cv2.line(output, pt1, pt2, (0,0,255), 1)
+        cv2.line(output, pt1, pt2, (0, 0, 255), 1)
         cv2.putText(output, f"{int(dist)}px", (mid_x, mid_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,0), 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
         spaces.append({
             'Space': f'Space {i+1}',
             'Type': 'Cluster',
