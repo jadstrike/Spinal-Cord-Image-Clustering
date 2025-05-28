@@ -11,6 +11,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import base64
 
+st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
+
 # Custom CSS for gradient sidebar background
 st.markdown(
     """
@@ -245,61 +247,6 @@ def image_to_base64(image_array):
     return base64.b64encode(byte_im).decode('utf-8')
 
 # Streamlit UI
-st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
-
-# Custom CSS
-st.markdown("""
-    <style>
-    .main { padding: 20px; }
-    .stButton>button {
-        background-color: #007BFF;
-        color: white;
-        border-radius: 5px;
-        font-weight: bold;
-        border: none;
-    }
-    .stButton>button:hover {
-        background-color: #0056b3;
-        color: #fff;
-    }
-    .stSlider { margin-bottom: 20px; }
-    .stCheckbox { margin-bottom: 20px; }
-    .image-container { text-align: center; }
-    .caption { font-size: 16px; color: #000; margin-top: 5px; font-weight: 800; }
-    .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; }
-    .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
-    .status { font-size: 14px; margin-top: 10px; }
-    .stDownloadButton { margin-top: 10px; }
-    .stDownloadButton > button {
-        margin-left: auto;
-        margin-right: auto;
-        display: block;
-        max-width: 350px;
-        width: 100%;
-    }
-    .modal {
-      display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100vw; height: 100vh;
-      overflow: auto; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center;
-    }
-    .modal-content {
-      margin: auto; display: block; max-width: 90vw; max-height: 90vh; border-radius: 10px;
-      box-shadow: 0 0 20px #000;
-    }
-    .close {
-      position: absolute; top: 30px; right: 50px; color: #fff; font-size: 40px; font-weight: bold; cursor: pointer;
-      z-index: 10000;
-    }
-    /* Center images in Streamlit's fullscreen modal */
-    .stModal img {
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
-        max-width: 90vw;
-        max-height: 90vh;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
 enable_detection = st.sidebar.checkbox("Enable disc space detection (OPTICS)", False)
