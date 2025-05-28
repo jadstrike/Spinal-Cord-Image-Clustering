@@ -9,6 +9,7 @@ from PIL import Image
 from sklearn.cluster import KMeans, OPTICS
 from scipy.spatial.distance import euclidean
 import matplotlib.pyplot as plt
+import streamlit as st
 
 app = FastAPI()
 
@@ -62,7 +63,7 @@ def detect_disc_spaces_optics(image):
     labels = optics.fit_predict(points)
     output = color_img.copy()
     unique_labels = sorted(set(labels))
-    base_cmap = plt.colormaps.get_cmap("tab10")
+    base_cmap = plt.get_cmap("tab10")
     color_list = [base_cmap(i % 10) for i in range(len(unique_labels))]
     cluster_centers = []
     for label in unique_labels:
@@ -111,7 +112,7 @@ class AnalyzeResponse(BaseModel):
     original: str
     preprocessed: str
     enhanced: str
-    analysis: str
+    discs_space_detection: str
     # Optionally: analysis_data: list
 
 @app.post("/analyze", response_model=AnalyzeResponse)
@@ -128,5 +129,47 @@ async def analyze(file: UploadFile = File(...)):
         original=image_to_base64(img_array),
         preprocessed=image_to_base64(processed),
         enhanced=image_to_base64(enhanced),
-        analysis=image_to_base64(overlaid)
-    ) 
+        discs_space_detection=image_to_base64(overlaid)
+    )
+
+# Sidebar
+st.sidebar.header("Spinal Cord Image Clustering")
+uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
+enable_detection = st.sidebar.checkbox("Enable disc space detection (OPTICS)", False)
+
+# Team Info Button
+show_team = st.sidebar.button("Show Team Info")
+
+st.title("Spinal Cord Image Clustering and Analysis")
+
+if show_team:
+    st.markdown("---")
+    st.header("Meet the Team")
+    cols = st.columns(3)
+    team = [
+        {
+            "name": "Alice Smith",
+            "role": "Lead Developer",
+            "img": "https://randomuser.me/api/portraits/women/44.jpg",
+            "bio": "Expert in medical imaging and AI."
+        },
+        {
+            "name": "Bob Lee",
+            "role": "Backend Engineer",
+            "img": "https://randomuser.me/api/portraits/men/32.jpg",
+            "bio": "Loves Python, FastAPI, and scalable systems."
+        },
+        {
+            "name": "Carol Tan",
+            "role": "UI/UX Designer",
+            "img": "https://randomuser.me/api/portraits/women/68.jpg",
+            "bio": "Passionate about beautiful, accessible design."
+        }
+    ]
+    for i, member in enumerate(team):
+        with cols[i]:
+            st.image(member["img"], width=120)
+            st.subheader(member["name"])
+            st.caption(member["role"])
+            st.write(member["bio"])
+    st.stop() 
