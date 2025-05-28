@@ -312,7 +312,6 @@ if uploaded_file:
         'Enhanced': image_to_base64(enhanced)
     }
     if enable_detection:
-        # Use the original uploaded image (color) for OPTICS
         orig_color = np.array(Image.open(uploaded_file).convert('RGB'))
         spaces, overlaid = detect_disc_spaces_optics(orig_color)
         images_dict['Analysis'] = image_to_base64(overlaid)
@@ -324,7 +323,7 @@ if uploaded_file:
             zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
     zip_buffer.seek(0)
     
-    # Display results
+    # Display top row: Original, Preprocessed, Enhanced
     col1, col2, col3 = st.columns(3)
     with col1:
         st.image(img_array, caption="Original", use_column_width=True)
@@ -349,28 +348,30 @@ if uploaded_file:
         )
         st.markdown('</div>', unsafe_allow_html=True)
     with col3:
-        if enable_detection:
-            st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
-            st.image(overlaid, caption="Disc Space Analysis (OPTICS)", use_column_width=True)
-            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
-            st.download_button(
-                label="Download Analysis Image",
-                data=image_to_base64(overlaid),
-                file_name=f"{filename}_analysis.png",
-                mime="image/png",
-                key="download3"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
-            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
-            st.download_button(
-                label="Download Enhanced Image",
-                data=image_to_base64(enhanced),
-                file_name=f"{filename}_enhanced.png",
-                mime="image/png",
-                key="download4"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
+        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+        st.download_button(
+            label="Download Enhanced Image",
+            data=image_to_base64(enhanced),
+            file_name=f"{filename}_enhanced.png",
+            mime="image/png",
+            key="download4"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+    # Below: Disc space detection (OPTICS) result
+    if enable_detection:
+        st.markdown("---")
+        st.subheader("Disc Space Detection (OPTICS)")
+        st.image(overlaid, caption="Disc Space Analysis (OPTICS)", use_column_width=True)
+        st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
+        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+        st.download_button(
+            label="Download Analysis Image",
+            data=image_to_base64(overlaid),
+            file_name=f"{filename}_analysis.png",
+            mime="image/png",
+            key="download3"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("Please upload a spinal X-ray image to begin analysis")
