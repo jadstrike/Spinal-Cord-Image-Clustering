@@ -363,7 +363,7 @@ if uploaded_file:
     # Health score
     if enable_detection and spaces:
         with st.expander("Spine Health Score"):
-            normal_count = sum(1 for s in spaces if s['type'] == "Normal")
+            normal_count = sum(1 for s in spaces if (s.get('type') == "Normal" or s.get('Type') == "Normal"))
             score = (normal_count / len(spaces)) * 100 if len(spaces) > 0 else 100
             st.metric("Spine Health Score", f"{score:.1f}%")
             st.progress(int(score))
