@@ -1,7 +1,8 @@
 import streamlit as st
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, OPTICS
+from scipy.spatial.distance import euclidean
 from PIL import Image, ImageDraw, ImageFont
 import io
 import zipfile
@@ -216,6 +217,9 @@ st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
 n_clusters = st.sidebar.slider("Number of Clusters", 2, 12, 8)
 enable_detection = st.sidebar.checkbox("Enable disc space detection", False)
+detection_method = None
+if enable_detection:
+    detection_method = st.sidebar.selectbox("Disc Space Detection Method", ["Classic", "OPTICS"], index=0)
 
 st.title("Spinal Cord Image Clustering and Analysis")
 
@@ -236,8 +240,11 @@ if uploaded_file:
         'Enhanced': image_to_base64(enhanced)
     }
     if enable_detection:
-        spaces = detect_disc_spaces(enhanced)
-        overlaid = overlay_spaces(enhanced, spaces)
+        if detection_method == "OPTICS":
+            spaces, overlaid = detect_disc_spaces_optics(enhanced)
+        else:
+            spaces = detect_disc_spaces(enhanced)
+            overlaid = overlay_spaces(enhanced, spaces)
         images_dict['Analysis'] = image_to_base64(overlaid)
     
     # Prepare ZIP for download
@@ -273,6 +280,12 @@ if uploaded_file:
         st.markdown('</div>', unsafe_allow_html=True)
     with col3:
         if enable_detection:
+            if detection_method == "OPTICS":
+                st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
+            else:
+                data = [[f"Space {i+1}", s['type'], f"{s['height']:.1f}px", f"{s['width']:.1f}px"] 
+                       for i,s in enumerate(spaces)]
+                st.table(pd.DataFrame(data, columns=["Space", "Type", "Height", "Width"]))
             st.image(overlaid, caption="Disc Space Analysis", use_column_width=True)
             st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
             st.download_button(
@@ -295,13 +308,6 @@ if uploaded_file:
             )
             st.markdown('</div>', unsafe_allow_html=True)
     
-    # Show measurements
-    if enable_detection:
-        st.subheader("Disc Space Measurements")
-        data = [[f"Space {i+1}", s['type'], f"{s['height']:.1f}px", f"{s['width']:.1f}px"] 
-               for i,s in enumerate(spaces)]
-        st.table(pd.DataFrame(data, columns=["Space", "Type", "Height", "Width"]))
-    
     # Health score
     if enable_detection and spaces:
         with st.expander("Spine Health Score"):
@@ -312,3 +318,56 @@ if uploaded_file:
             st.caption("Higher scores indicate better spinal health with more normal disc spaces")
 else:
     st.info("Please upload a spinal X-ray image to begin analysis")
+
+# OPTICS-based disc space detection function
+def detect_disc_spaces_optics(image):
+    # image: should be a 2D numpy array (grayscale)
+    edges = cv2.Canny(image, 50, 150)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    points = []
+    for cnt in contours:
+        M = cv2.moments(cnt)
+        if M['m00'] > 0:
+            cx = int(M['m10'] / M['m00'])
+            cy = int(M['m01'] / M['m00'])
+            points.append([cx, cy])
+    if len(points) < 2:
+        return [], image  # Not enough points for clustering
+    points = np.array(points)
+    optics = OPTICS(min_samples=2, xi=0.05, min_cluster_size=0.05)
+    labels = optics.fit_predict(points)
+    output = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    unique_labels = sorted(set(labels))
+    base_cmap = plt.colormaps.get_cmap("tab10")
+    color_list = [base_cmap(i % 10) for i in range(len(unique_labels))]
+    cluster_centers = []
+    for label in unique_labels:
+        if label == -1:
+            continue
+        cluster_points = points[labels == label]
+        center = np.mean(cluster_points, axis=0).astype(int)
+        cluster_centers.append(center)
+        color = color_list[label % len(color_list)]
+        for pt in cluster_points:
+            cv2.circle(output, tuple(pt), 3, (
+                int(color[0]*255), int(color[1]*255), int(color[2]*255)), -1)
+        cv2.circle(output, tuple(center), 6, (255,255,255), 2)
+    # Sort centers vertically and calculate distances
+    cluster_centers.sort(key=lambda x: x[1])
+    spaces = []
+    for i in range(len(cluster_centers)-1):
+        pt1 = tuple(cluster_centers[i])
+        pt2 = tuple(cluster_centers[i+1])
+        dist = euclidean(pt1, pt2)
+        mid_x = (pt1[0] + pt2[0]) // 2
+        mid_y = (pt1[1] + pt2[1]) // 2
+        cv2.line(output, pt1, pt2, (0,0,255), 1)
+        cv2.putText(output, f"{int(dist)}px", (mid_x, mid_y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,0), 1)
+        spaces.append({
+            'Space': f'Space {i+1}',
+            'Type': 'Cluster',
+            'Height': f"{dist:.1f}px",
+            'Width': f"-"
+        })
+    return spaces, output
