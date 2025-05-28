@@ -8,6 +8,7 @@ import zipfile
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import base64
 
 # Function to check font availability
 def check_fonts():
@@ -149,10 +150,11 @@ def overlay_spaces(image, spaces):
     
     return img_rgb
 
-def image_to_bytes(image):
+def image_to_base64(image_array):
     buf = io.BytesIO()
-    Image.fromarray(image).save(buf, format='PNG')
-    return buf.getvalue()
+    Image.fromarray(image_array).save(buf, format='PNG')
+    byte_im = buf.getvalue()
+    return base64.b64encode(byte_im).decode('utf-8')
 
 # Streamlit UI
 st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
@@ -188,7 +190,7 @@ st.markdown("""
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
 n_clusters = st.sidebar.slider("Number of Clusters", 2, 12, 8)
-enable_detection = st.sidebar.checkbox("Enable disc space detection", True)
+enable_detection = st.sidebar.checkbox("Enable disc space detection", False)
 
 st.title("Spinal Cord Image Clustering and Analysis")
 
@@ -204,14 +206,14 @@ if uploaded_file:
     
     # Prepare images for download
     images_dict = {
-        'Original': image_to_bytes(img_array),
-        'Preprocessed': image_to_bytes(processed),
-        'Enhanced': image_to_bytes(enhanced)
+        'Original': image_to_base64(img_array),
+        'Preprocessed': image_to_base64(processed),
+        'Enhanced': image_to_base64(enhanced)
     }
     if enable_detection:
         spaces = detect_disc_spaces(enhanced)
         overlaid = overlay_spaces(enhanced, spaces)
-        images_dict['Analysis'] = image_to_bytes(overlaid)
+        images_dict['Analysis'] = image_to_base64(overlaid)
     
     # Prepare ZIP for download
     zip_buffer = io.BytesIO()
@@ -225,10 +227,9 @@ if uploaded_file:
     with col1:
         st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         st.image(img_array, caption="Original", use_column_width=True)
-        st.markdown(f'''<button onclick="openModal('original-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
         st.download_button(
             label="Download Original Image",
-            data=image_to_bytes(img_array),
+            data=image_to_base64(img_array),
             file_name=f"{filename}_original.png",
             mime="image/png",
             key="download1"
@@ -237,10 +238,9 @@ if uploaded_file:
     with col2:
         st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
-        st.markdown(f'''<button onclick="openModal('preprocessed-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
         st.download_button(
             label="Download Preprocessed Image",
-            data=image_to_bytes(processed),
+            data=image_to_base64(processed),
             file_name=f"{filename}_preprocessed.png",
             mime="image/png",
             key="download2"
@@ -250,20 +250,18 @@ if uploaded_file:
         st.markdown('<div style="text-align:center">', unsafe_allow_html=True)
         if enable_detection:
             st.image(overlaid, caption="Disc Space Analysis", use_column_width=True)
-            st.markdown(f'''<button onclick="openModal('analysis-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
             st.download_button(
                 label="Download Analysis Image",
-                data=image_to_bytes(overlaid),
+                data=image_to_base64(overlaid),
                 file_name=f"{filename}_analysis.png",
                 mime="image/png",
                 key="download3"
             )
         else:
             st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
-            st.markdown(f'''<button onclick="openModal('enhanced-modal')" style="margin:10px auto;display:block;">View Full Image</button>''', unsafe_allow_html=True)
             st.download_button(
                 label="Download Enhanced Image",
-                data=image_to_bytes(enhanced),
+                data=image_to_base64(enhanced),
                 file_name=f"{filename}_enhanced.png",
                 mime="image/png",
                 key="download4"
@@ -285,26 +283,5 @@ if uploaded_file:
             st.metric("Spine Health Score", f"{score:.1f}%")
             st.progress(int(score))
             st.caption("Higher scores indicate better spinal health with more normal disc spaces")
-    
-    # Modal HTML/CSS/JS for full image view
-    st.markdown('''
-    <div id="original-modal" class="modal"><span class="close" onclick="closeModal('original-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{0}"></div>
-    <div id="preprocessed-modal" class="modal"><span class="close" onclick="closeModal('preprocessed-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{1}"></div>
-    <div id="enhanced-modal" class="modal"><span class="close" onclick="closeModal('enhanced-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{2}"></div>
-    <div id="analysis-modal" class="modal"><span class="close" onclick="closeModal('analysis-modal')">&times;</span><img class="modal-content" src="data:image/png;base64,{3}"></div>
-    <script>
-    function openModal(id) {
-      document.getElementById(id).style.display = 'flex';
-    }
-    function closeModal(id) {
-      document.getElementById(id).style.display = 'none';
-    }
-    </script>
-    '''.format(
-        Image.fromarray(img_array).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if hasattr(Image.fromarray(img_array), '_repr_png_') else '',
-        Image.fromarray(processed).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if hasattr(Image.fromarray(processed), '_repr_png_') else '',
-        Image.fromarray(enhanced).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if hasattr(Image.fromarray(enhanced), '_repr_png_') else '',
-        Image.fromarray(overlaid).convert('RGB')._repr_png_().decode('latin1').encode('base64').decode() if (enable_detection and 'overlaid' in locals() and hasattr(Image.fromarray(overlaid), '_repr_png_')) else ''
-    ), unsafe_allow_html=True)
 else:
     st.info("Please upload a spinal X-ray image to begin analysis")
