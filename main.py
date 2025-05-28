@@ -163,7 +163,17 @@ st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
 st.markdown("""
     <style>
     .main { padding: 20px; }
-    .stButton>button { background-color: #4CAF50; color: white; border-radius: 5px; }
+    .stButton>button {
+        background-color: #007BFF;
+        color: white;
+        border-radius: 5px;
+        font-weight: bold;
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: #0056b3;
+        color: #fff;
+    }
     .stSlider { margin-bottom: 20px; }
     .stCheckbox { margin-bottom: 20px; }
     .image-container { text-align: center; }
@@ -172,6 +182,13 @@ st.markdown("""
     .subheader { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
     .status { font-size: 14px; margin-top: 10px; }
     .stDownloadButton { margin-top: 10px; }
+    .stDownloadButton > button {
+        margin-left: auto;
+        margin-right: auto;
+        display: block;
+        max-width: 350px;
+        width: 100%;
+    }
     .modal {
       display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100vw; height: 100vh;
       overflow: auto; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center;
