@@ -11,6 +11,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import base64
 
+# Custom CSS for gradient sidebar background
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"] {
+        background: linear-gradient(135deg, #007BFF 0%, #6BCBFF 100%) !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Function to check font availability
 def check_fonts():
     try:
