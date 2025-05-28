@@ -357,6 +357,23 @@ if uploaded_file:
             key="download4"
         )
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # New: Enhanced (Black to Blue) image in the middle section
+    blue_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    blue_mask = (enhanced == 0)
+    blue_img[blue_mask] = [0, 0, 255]  # Set black pixels to blue (BGR)
+    st.markdown("<div style='text-align:center; margin-top:20px; margin-bottom:10px;'><b>Enhanced (Black to Blue)</b></div>", unsafe_allow_html=True)
+    st.image(blue_img, caption="Enhanced (Black to Blue)", use_column_width=True)
+    st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+    st.download_button(
+        label="Download Black-to-Blue Image",
+        data=image_to_base64(blue_img),
+        file_name=f"{filename}_black_to_blue.png",
+        mime="image/png",
+        key="download5"
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # Below: Disc space detection (OPTICS) result
     if enable_detection:
         st.markdown("---")
