@@ -374,29 +374,28 @@ if uploaded_file:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # New: Background-to-Blue using segmentation
-    # Threshold to separate background
-    _, thresh = cv2.threshold(enhanced, 10, 255, cv2.THRESH_BINARY)
-    # Invert to get background mask
-    bg_mask = cv2.bitwise_not(thresh)
-    # Find contours and fill the largest (background)
-    contours, _ = cv2.findContours(bg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    bg_mask_filled = np.zeros_like(bg_mask)
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        cv2.drawContours(bg_mask_filled, [largest_contour], -1, 255, thickness=cv2.FILLED)
+    # Improved: Background-to-Blue using flood fill from corners
+    flood_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    h, w = enhanced.shape
+    mask = np.zeros((h+2, w+2), np.uint8)
+    flood_mask = np.zeros_like(enhanced, dtype=np.uint8)
+    # Flood fill from all four corners
+    for seed in [(0,0), (0,w-1), (h-1,0), (h-1,w-1)]:
+        temp_img = enhanced.copy()
+        cv2.floodFill(temp_img, mask, seedPoint=seed, newVal=255, loDiff=10, upDiff=10)
+        flood_mask = cv2.bitwise_or(flood_mask, cv2.inRange(temp_img, 255, 255))
     # Color only the background blue
-    bg_blue_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
-    bg_blue_img[bg_mask_filled == 255] = [0, 0, 255]
-    st.markdown("<div style='text-align:center; margin-top:20px; margin-bottom:10px;'><b>Background Colored Blue (Segmentation)</b></div>", unsafe_allow_html=True)
-    st.image(bg_blue_img, caption="Background Colored Blue (Segmentation)", width=400)
+    improved_bg_blue_img = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    improved_bg_blue_img[flood_mask == 255] = [0, 0, 255]
+    st.markdown("<div style='text-align:center; margin-top:20px; margin-bottom:10px;'><b>Background Colored Blue (Flood Fill)</b></div>", unsafe_allow_html=True)
+    st.image(improved_bg_blue_img, caption="Background Colored Blue (Flood Fill)", width=400)
     st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
     st.download_button(
-        label="Download Background-to-Blue Image",
-        data=image_to_base64(bg_blue_img),
-        file_name=f"{filename}_background_to_blue.png",
+        label="Download Background-to-Blue (Flood Fill) Image",
+        data=image_to_base64(improved_bg_blue_img),
+        file_name=f"{filename}_background_to_blue_floodfill.png",
         mime="image/png",
-        key="download6"
+        key="download7"
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
