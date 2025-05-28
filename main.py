@@ -331,19 +331,10 @@ with main_col:
         col1, col2, col3 = st.columns(3)
         with col1:
             st.image(img_array, caption="Original", use_column_width=True)
-            if st.button("View Full Original", key="view_full_original"):
-                st.session_state.full_image = img_array
-                st.session_state.full_image_caption = "Original"
         with col2:
             st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
-            if st.button("View Full Preprocessed", key="view_full_preprocessed"):
-                st.session_state.full_image = processed
-                st.session_state.full_image_caption = "Preprocessed (CLAHE)"
         with col3:
             st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
-            if st.button("View Full Enhanced", key="view_full_enhanced"):
-                st.session_state.full_image = enhanced
-                st.session_state.full_image_caption = "Enhanced (K-Means)"
 
         # Centered download buttons under each image
         col1, col2, col3 = st.columns(3)
