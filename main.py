@@ -290,7 +290,6 @@ st.markdown("""
 
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
-n_clusters = st.sidebar.slider("Number of Clusters", 2, 12, 8)
 enable_detection = st.sidebar.checkbox("Enable disc space detection (OPTICS)", False)
 
 st.title("Spinal Cord Image Clustering and Analysis")
@@ -302,7 +301,7 @@ if uploaded_file:
     
     # Processing pipeline
     processed = preprocess_image(img_array)
-    clustered = enhance_image_kmeans(processed, n_clusters)
+    clustered = enhance_image_kmeans(processed, 8)  # Use default 8 clusters
     enhanced = blend_images(processed, clustered)
     
     # Prepare images for download
@@ -362,8 +361,7 @@ if uploaded_file:
     if enable_detection:
         st.markdown("---")
         st.subheader("Disc Space Detection (OPTICS)")
-        st.image(overlaid, caption="Disc Space Analysis (OPTICS)", use_column_width=True)
-        st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
+        st.image(overlaid, caption="Disc Space Analysis (OPTICS)", width=400)
         st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
         st.download_button(
             label="Download Analysis Image",
