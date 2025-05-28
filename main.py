@@ -361,15 +361,19 @@ if uploaded_file:
     if enable_detection:
         st.markdown("---")
         st.subheader("Disc Space Detection (OPTICS)")
-        st.image(overlaid, caption="Disc Space Analysis (OPTICS)", width=400)
-        st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
-        st.download_button(
-            label="Download Analysis Image",
-            data=image_to_base64(overlaid),
-            file_name=f"{filename}_analysis.png",
-            mime="image/png",
-            key="download3"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        col_img, col_table = st.columns([1,1])
+        with col_img:
+            st.image(overlaid, caption="Disc Space Analysis (OPTICS)", width=400)
+            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+            st.download_button(
+                label="Download Analysis Image",
+                data=image_to_base64(overlaid),
+                file_name=f"{filename}_analysis.png",
+                mime="image/png",
+                key="download3"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col_table:
+            st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
 else:
     st.info("Please upload a spinal X-ray image to begin analysis")
