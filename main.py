@@ -1,14 +1,12 @@
 import streamlit as st
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans, OPTICS
-from scipy.spatial.distance import euclidean
+from sklearn.cluster import KMeans
 from PIL import Image, ImageDraw, ImageFont
 import io
 import zipfile
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
 import base64
 
 st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
@@ -85,178 +83,6 @@ def blend_images(original, clustered, alpha=0.7):
     blended = alpha * clustered + (1 - alpha) * original
     return cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-# Enhanced disc space detection
-def detect_disc_spaces(image):
-    blurred = cv2.GaussianBlur(image, (5, 5), 0)
-    binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                 cv2.THRESH_BINARY_INV, 21, 5)
-    
-    kernel = np.ones((5,5), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=3)
-    
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[1])
-    
-    spaces = []
-    for i in range(len(contours)-1):
-        x1, y1, w1, h1 = cv2.boundingRect(contours[i])
-        x2, y2, w2, h2 = cv2.boundingRect(contours[i+1])
-        
-        if abs(x1-x2) < max(w1,w2)*1.5 and y2 > y1+h1:
-            space_height = y2 - (y1+h1)
-            if 5 < space_height < 40:
-                space = {
-                    'y': y1+h1 + space_height//2,
-                    'x_start': min(x1,x2),
-                    'x_end': max(x1+w1,x2+w2),
-                    'height': space_height,
-                    'width': max(x1+w1,x2+w2) - min(x1,x2),
-                    'type': classify_space(image, y1+h1, y2, min(x1,x2), max(x1+w1,x2+w2))
-                }
-                spaces.append(space)
-    return spaces
-
-def classify_space(image, top, bottom, left, right):
-    roi = image[top:bottom, left:right]
-    edges = cv2.Canny(roi, 50, 150)
-    edge_density = np.sum(edges)/(roi.size*255)
-    
-    if edge_density > 0.2:
-        return "Osteophytes"
-    elif np.std(roi) < 25:
-        return "Sclerotic"
-    elif (bottom-top) < 15:
-        return "Narrowed"
-    else:
-        return "Normal"
-
-# Robust text overlay using Pillow as fallback
-def overlay_spaces(image, spaces):
-    img_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-    colors = {
-        "Normal": (0,255,0),
-        "Narrowed": (255,0,0),
-        "Osteophytes": (255,165,0),
-        "Sclerotic": (0,255,255)
-    }
-    
-    if FONT_AVAILABLE:
-        # Use OpenCV if fonts are available
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        for space in spaces:
-            color = colors.get(space['type'], (0,255,255))
-            cv2.line(img_rgb, (space['x_start'], space['y']), 
-                    (space['x_end'], space['y']), color, 3)
-            
-            label = f"{space['type']} {space['height']:.1f}px"
-            text_size = cv2.getTextSize(label, font, 0.5, 2)[0]
-            text_x = space['x_start'] + 10
-            text_y = space['y'] - 10
-            
-            if text_y - text_size[1] < 0:
-                text_y = space['y'] + text_size[1] + 10
-            if text_x + text_size[0] > img_rgb.shape[1]:
-                text_x = img_rgb.shape[1] - text_size[0] - 10
-                
-            cv2.putText(img_rgb, label, (text_x, text_y),
-                       font, 0.5, color, 2)
-    else:
-        # Fallback to Pillow
-        img_pil = Image.fromarray(img_rgb)
-        draw = ImageDraw.Draw(img_pil)
-        try:
-            font = ImageFont.truetype("arial.ttf", 15)
-        except:
-            font = ImageFont.load_default()
-        
-        for space in spaces:
-            color = colors.get(space['type'], (0,255,255))
-            draw.line([(space['x_start'], space['y']), 
-                     (space['x_end'], space['y'])], 
-                     fill=color, width=3)
-            draw.text((space['x_start']+10, space['y']-15), 
-                     f"{space['type']} {space['height']:.1f}px", 
-                     fill=color, font=font)
-        
-        img_rgb = np.array(img_pil)
-    return img_rgb
-
-# OPTICS-based disc space detection function
-def detect_disc_spaces_optics(image):
-    # image: should be a 2D or 3D numpy array (grayscale or color)
-    # If grayscale, convert to BGR for visualization
-    if len(image.shape) == 2:
-        color_img = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-        gray = image
-    else:
-        color_img = image.copy()
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Edge detection
-    edges = cv2.Canny(gray, 50, 150)
-
-    # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Extract centroids of contours
-    points = []
-    for cnt in contours:
-        M = cv2.moments(cnt)
-        if M['m00'] > 0:
-            cx = int(M['m10'] / M['m00'])
-            cy = int(M['m01'] / M['m00'])
-            points.append([cx, cy])
-    points = np.array(points)
-
-    if len(points) < 2:
-        return [], color_img  # Not enough points for clustering
-
-    # Apply OPTICS clustering
-    optics = OPTICS(min_samples=2, xi=0.05, min_cluster_size=0.05)
-    labels = optics.fit_predict(points)
-
-    # Prepare visualization
-    output = color_img.copy()
-    unique_labels = sorted(set(labels))  # Sort for consistent coloring
-    base_cmap = plt.colormaps.get_cmap("tab10")
-    color_list = [base_cmap(i % 10) for i in range(len(unique_labels))]
-
-    cluster_centers = []
-    for label in unique_labels:
-        if label == -1:
-            continue  # Skip noise
-        cluster_points = points[labels == label]
-        center = np.mean(cluster_points, axis=0).astype(int)
-        cluster_centers.append(center)
-        color = color_list[label % len(color_list)]
-        for pt in cluster_points:
-            cv2.circle(output, tuple(pt), 3, (
-                int(color[0] * 255),
-                int(color[1] * 255),
-                int(color[2] * 255)
-            ), -1)
-        cv2.circle(output, tuple(center), 6, (255, 255, 255), 2)
-
-    # Sort centers vertically and calculate distances
-    cluster_centers.sort(key=lambda x: x[1])  # Sort by y-coordinate
-    spaces = []
-    for i in range(len(cluster_centers) - 1):
-        pt1 = tuple(cluster_centers[i])
-        pt2 = tuple(cluster_centers[i + 1])
-        dist = euclidean(pt1, pt2)
-        mid_x = (pt1[0] + pt2[0]) // 2
-        mid_y = (pt1[1] + pt2[1]) // 2
-        cv2.line(output, pt1, pt2, (0, 0, 255), 1)
-        cv2.putText(output, f"{int(dist)}px", (mid_x, mid_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
-        spaces.append({
-            'Space': f'Space {i+1}',
-            'Type': 'Cluster',
-            'Height': f"{dist:.1f}px",
-            'Width': f"-"
-        })
-    return spaces, output
-
 def image_to_base64(image_array):
     buf = io.BytesIO()
     Image.fromarray(image_array).save(buf, format='PNG')
@@ -286,7 +112,6 @@ if st.session_state.full_image is not None:
 # Streamlit UI
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
-enable_detection = st.sidebar.checkbox("Enable disc space detection (OPTICS)", False)
 show_team = st.sidebar.checkbox("Show Team Info")
 
 # Layout: main content (left), team info (right if checked)
@@ -306,7 +131,7 @@ with main_col:
         
         # Processing pipeline
         processed = preprocess_image(img_array)
-        clustered = enhance_image_kmeans(processed, 8)  # Use default 8 clusters
+        clustered = enhance_image_kmeans(processed, 8)
         enhanced = blend_images(processed, clustered)
         
         # Prepare images for download
@@ -315,10 +140,6 @@ with main_col:
             'Preprocessed': image_to_base64(processed),
             'Enhanced': image_to_base64(enhanced)
         }
-        if enable_detection:
-            orig_color = np.array(Image.open(uploaded_file).convert('RGB'))
-            spaces, overlaid = detect_disc_spaces_optics(orig_color)
-            images_dict['Analysis'] = image_to_base64(overlaid)
         
         # Prepare ZIP for download
         zip_buffer = io.BytesIO()
@@ -363,24 +184,6 @@ with main_col:
                 key="download4"
             )
 
-        # Below: Disc space detection (OPTICS) result
-        if enable_detection:
-            st.markdown("---")
-            st.subheader("Disc Space Detection (OPTICS)")
-            col_img, col_table = st.columns([1,1])
-            with col_img:
-                st.image(overlaid, caption="Disc Space Analysis (OPTICS)", width=400)
-                st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
-                st.download_button(
-                    label="Download Analysis Image",
-                    data=image_to_base64(overlaid),
-                    file_name=f"{filename}_analysis.png",
-                    mime="image/png",
-                    key="download3"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-            with col_table:
-                st.table(pd.DataFrame(spaces, columns=["Space", "Type", "Height", "Width"]))
     else:
         st.info("Please upload a spinal X-ray image to begin analysis")
 
