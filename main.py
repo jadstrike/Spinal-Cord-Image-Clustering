@@ -2,11 +2,10 @@ import streamlit as st
 import cv2
 import numpy as np
 from sklearn.cluster import KMeans
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import io
 import zipfile
 import os
-import pandas as pd
 import base64
 
 st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
@@ -83,11 +82,22 @@ def blend_images(original, clustered, alpha=0.7):
     blended = alpha * clustered + (1 - alpha) * original
     return cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-def image_to_base64(image_array):
+# Function to convert image array to raw PNG bytes
+def image_to_bytes(image_array):
+    # Ensure the image is in uint8 format
+    if image_array.dtype != np.uint8:
+        image_array = cv2.normalize(image_array, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    
+    # Convert to PIL Image and save to PNG bytes
+    img = Image.fromarray(image_array)
     buf = io.BytesIO()
-    Image.fromarray(image_array).save(buf, format='PNG')
-    byte_im = buf.getvalue()
-    return base64.b64encode(byte_im).decode('utf-8')
+    img.save(buf, format='PNG')
+    return buf.getvalue()
+
+# Function to convert image array to base64 string for display (if needed)
+def image_to_base64(image_array):
+    img_bytes = image_to_bytes(image_array)
+    return base64.b64encode(img_bytes).decode('utf-8')
 
 # Track which image is clicked for full view
 if "full_image" not in st.session_state:
@@ -136,33 +146,37 @@ with main_col:
         
         # Prepare images for download
         images_dict = {
-            'Original': image_to_base64(img_array),
-            'Preprocessed': image_to_base64(processed),
-            'Enhanced': image_to_base64(enhanced)
+            'Original': img_array,
+            'Preprocessed': processed,
+            'Clustered': clustered,
+            'Enhanced': enhanced
         }
         
         # Prepare ZIP for download
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for key, img_bytes in images_dict.items():
+            for key, img_array in images_dict.items():
+                img_bytes = image_to_bytes(img_array)  # Get raw PNG bytes
                 zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
         zip_buffer.seek(0)
         
-        # Display top row: Original, Preprocessed, Enhanced
-        col1, col2, col3 = st.columns(3)
+        # Display images: Original, Preprocessed, Clustered, Enhanced
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.image(img_array, caption="Original", use_column_width=True)
         with col2:
             st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
         with col3:
-            st.image(enhanced, caption="Enhanced (K-Means)", use_column_width=True)
+            st.image(clustered, caption="Clustered (K-Means)", use_column_width=True)
+        with col4:
+            st.image(enhanced, caption="Enhanced (Blended)", use_column_width=True)
 
-        # Centered download buttons under each image
-        col1, col2, col3 = st.columns(3)
+        # Download buttons under each image
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.download_button(
                 label="Download Original Image",
-                data=image_to_base64(img_array),
+                data=image_to_bytes(img_array),
                 file_name=f"{filename}_original.png",
                 mime="image/png",
                 key="download1"
@@ -170,19 +184,36 @@ with main_col:
         with col2:
             st.download_button(
                 label="Download Preprocessed Image",
-                data=image_to_base64(processed),
+                data=image_to_bytes(processed),
                 file_name=f"{filename}_preprocessed.png",
                 mime="image/png",
                 key="download2"
             )
         with col3:
             st.download_button(
+                label="Download Clustered Image",
+                data=image_to_bytes(clustered),
+                file_name=f"{filename}_clustered.png",
+                mime="image/png",
+                key="download3"
+            )
+        with col4:
+            st.download_button(
                 label="Download Enhanced Image",
-                data=image_to_base64(enhanced),
+                data=image_to_bytes(enhanced),
                 file_name=f"{filename}_enhanced.png",
                 mime="image/png",
                 key="download4"
             )
+
+        # Download all images as ZIP
+        st.download_button(
+            label="Download All Images as ZIP",
+            data=zip_buffer,
+            file_name=f"{filename}_images.zip",
+            mime="application/zip",
+            key="download_zip"
+        )
 
     else:
         st.info("Please upload a spinal X-ray image to begin analysis")
