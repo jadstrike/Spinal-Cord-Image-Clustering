@@ -135,8 +135,15 @@ with main_col:
     st.title("Spinal Cord Image Clustering and Analysis")
 
     if uploaded_file:
-        image = Image.open(uploaded_file).convert('L')
-        img_array = np.array(image)
+        # Keep original image for display
+        original_image = Image.open(uploaded_file)         # Do NOT convert to grayscale here
+        original_array = np.array(original_image)
+
+        # Convert to grayscale for processing
+        gray_image = original_image.convert('L')
+        img_array = np.array(gray_image)
+
+        
         filename = os.path.splitext(uploaded_file.name)[0]
         
         # Processing pipeline
@@ -163,7 +170,7 @@ with main_col:
         # Display images: Original, Preprocessed, Clustered, Enhanced
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.image(img_array, caption="Original", use_column_width=True)
+            st.image(original_array, caption="Original", use_column_width=True)
         with col2:
             st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
         with col3:
