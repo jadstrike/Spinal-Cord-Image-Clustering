@@ -233,32 +233,27 @@ if show_team and team_col is not None:
             {
                 "name": "Ye Lin Soe",
                 "role": "Team Leader",
-                "img": "yls.jpeg",
-                "bio": "Expert in medical imaging and AI."
+                "img": "yls.jpeg"
             },
             {
                 "name": "Khant Zwe Naing",
                 "role": "Lead Developer",
-                "img": "./kzn.jpg",
-                "bio": "Loves Python, FastAPI, and scalable systems."
+                "img": "./kzn.jpg"
             },
             {
                 "name": "A. Traore",
                 "role": "Lead Developer",
-                "img": "./abu.jpeg",
-                "bio": "Passionate about beautiful, accessible design."
+                "img": "./abu.jpeg"
             },
              {
                 "name": "Dr. D. Mbiba",
                 "role": "Lorum Ipsum",
-                "img": "https://randomuser.me/api/portraits/women/68.jpg",
-                "bio": "Passionate about beautiful, accessible design."
+                "img": "https://randomuser.me/api/portraits/women/68.jpg"
             },
             {
                 "name": "Rishika",
                 "role": "Lorum Ipsum",
-                "img": "https://randomuser.me/api/portraits/women/68.jpg",
-                "bio": "Passionate about beautiful, accessible design."
+                "img": "https://randomuser.me/api/portraits/women/68.jpg"
             },
             
             
