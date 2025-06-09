@@ -262,4 +262,3 @@ if show_team and team_col is not None:
             st.image(member["img"], width=100)
             st.subheader(member["name"])
             st.caption(member["role"])
-            st.write(member["bio"])
