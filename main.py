@@ -231,23 +231,37 @@ if show_team and team_col is not None:
         st.header("Meet the Team")
         team = [
             {
-                "name": "Alice Smith",
-                "role": "Lead Developer",
+                "name": "Ye Lin Soe",
+                "role": "Team Leader",
                 "img": "https://randomuser.me/api/portraits/women/44.jpg",
                 "bio": "Expert in medical imaging and AI."
             },
             {
-                "name": "Bob Lee",
-                "role": "Backend Engineer",
+                "name": "Khant Zwe Naing",
+                "role": "Lead Developer",
                 "img": "https://randomuser.me/api/portraits/men/32.jpg",
                 "bio": "Loves Python, FastAPI, and scalable systems."
             },
             {
-                "name": "Carol Tan",
-                "role": "UI/UX Designer",
+                "name": "A. Traore",
+                "role": "Lead Developer",
                 "img": "https://randomuser.me/api/portraits/women/68.jpg",
                 "bio": "Passionate about beautiful, accessible design."
-            }
+            },
+             {
+                "name": "Dr. D. Mbiba",
+                "role": "Lorum Ipsum",
+                "img": "https://randomuser.me/api/portraits/women/68.jpg",
+                "bio": "Passionate about beautiful, accessible design."
+            },
+            {
+                "name": "Rishika",
+                "role": "Lorum Ipsum",
+                "img": "https://randomuser.me/api/portraits/women/68.jpg",
+                "bio": "Passionate about beautiful, accessible design."
+            },
+            
+            
         ]
         for member in team:
             st.image(member["img"], width=100)
