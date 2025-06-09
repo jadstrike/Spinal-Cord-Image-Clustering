@@ -15,6 +15,39 @@ st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
 st.markdown(
     """
     <style>
+    /* Ensure the main content area of Streamlit takes full height and remove default spacing */
+    /* These classes are often specific to Streamlit's internal rendering. */
+    /* You might need to inspect your running app's HTML (F12 in browser) if these change in future versions. */
+
+    /* Targets the main content area container */
+    .st-emotion-cache-1jmve30 { /* Common class for layout="wide" main block */
+        flex-direction: column;
+        justify-content: flex-start; /* Align content to the very top */
+        min-height: 100vh; /* Make it take the full viewport height */
+        padding-top: 0px !important; /* Crucial: Remove Streamlit's default top padding */
+        padding-bottom: 0px !important; /* Remove Streamlit's default bottom padding */
+        margin-top: 0px !important; /* Remove any default top margin */
+        margin-bottom: 0px !important; /* Remove any default bottom margin */
+    }
+
+    /* Targets an inner wrapper div that might also have default spacing */
+    .st-emotion-cache-1sddxrb { /* Another common wrapper div */
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* Targets the specific block that contains your st.markdown content */
+    /* This can sometimes be another layer of div wrapping your content */
+    div.block-container {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+
     /* Sidebar styling with gradient */
     [data-testid="stSidebar"] {
         background: linear-gradient(135deg, #007BFF 0%, #6BCBFF 100%) !important;
@@ -49,14 +82,23 @@ st.markdown(
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        min-height: 85vh; /* Takes most of the viewport height */
-        padding: 40px 20px; /* Add horizontal padding too */
+        /* Flex-grow allows it to fill available height after parent spacing is removed */
+        flex-grow: 1;
+        width: 100%; /* Ensure it spans full width */
+        box-sizing: border-box; /* Include padding in width calculation */
+
+        /* Crucial: Remove top margin/padding from this container itself */
+        margin-top: 0 !important;
+        padding-top: 40px !important; /* Apply desired top padding *within* this container */
+        padding-bottom: 40px !important; /* Apply desired bottom padding *within* this container */
+        padding-left: 20px;
+        padding-right: 20px;
+
         background-color: #f0f2f6; /* Light background for the team page */
         color: #333;
         text-align: center;
-        width: 100%; /* Ensure it spans full width */
-        box-sizing: border-box; /* Include padding in width calculation */
+        /* min-height calculation is tricky; using flex-grow and padding removal is often more robust */
+        /* min-height: calc(100vh - 56px); -- You can uncomment/adjust this if still seeing issues */
     }
 
     .team-info-container h1 {
@@ -64,6 +106,7 @@ st.markdown(
         margin-bottom: 40px; /* Space below the main heading */
         font-size: 3em; /* Larger font size for prominence */
         text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        padding-top: 0; /* Ensure no extra padding at the top of the h1 */
     }
 
     .team-grid {
@@ -115,7 +158,7 @@ st.markdown(
         margin-top: 0; /* Remove default paragraph margin */
     }
 
-    /* Full image view styling */
+    /* Full image view styling (for when a processed image is clicked) */
     .full-image-view {
         display: flex;
         flex-direction: column;
@@ -214,6 +257,7 @@ show_team = st.sidebar.checkbox("Show Team Info", help="Tick to view information
 
 if show_team:
     # --- Team Info Page ---
+    # The div will now fill the available space due to the CSS changes
     st.markdown('<div class="team-info-container">', unsafe_allow_html=True)
     st.markdown('<h1>Meet Our Amazing Team</h1>', unsafe_allow_html=True)
     st.markdown('<div class="team-grid">', unsafe_allow_html=True)
@@ -261,12 +305,16 @@ if show_team:
                 else:
                     # Fallback to placeholder if local file not found
                     st.warning(f"Local image not found for {member['name']}: {local_img_path}. Using placeholder.")
-                    image_source = f"https://via.placeholder.com/150/007BFF/FFFFFF?text={member['name'].split()[0]}"
+                    # Use a default placeholder that is distinct if name is empty
+                    placeholder_text = member['name'].split()[0] if member['name'] else 'Team'
+                    image_source = f"https://via.placeholder.com/150/007BFF/FFFFFF?text={placeholder_text}"
             else: # Assume it's a URL
                 image_source = member["img"]
         except Exception as e:
             st.error(f"Error loading image for {member['name']}: {e}. Using placeholder.")
-            image_source = f"https://via.placeholder.com/150/007BFF/FFFFFF?text={member['name'].split()[0]}" # Fallback
+            # Use a default placeholder that is distinct if name is empty
+            placeholder_text = member['name'].split()[0] if member['name'] else 'Team'
+            image_source = f"https://via.placeholder.com/150/007BFF/FFFFFF?text={placeholder_text}" # Fallback
 
         st.markdown(f"""
             <div class="team-member-card">
