@@ -8,44 +8,64 @@ import zipfile
 import os
 import base64
 
-# Set Streamlit page configuration
+# Set Streamlit page configuration to wide
 st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
 
-# --- Custom CSS for beautiful styling ---
+# --- Custom CSS for maximum blank space removal and styling ---
 st.markdown(
     """
     <style>
-    /* Ensure the main content area of Streamlit takes full height and remove default spacing */
-    /* These classes are often specific to Streamlit's internal rendering. */
-    /* You might need to inspect your running app's HTML (F12 in browser) if these change in future versions. */
-
-    /* Targets the main content area container */
-    .st-emotion-cache-1jmve30 { /* Common class for layout="wide" main block */
-        flex-direction: column;
-        justify-content: flex-start; /* Align content to the very top */
-        min-height: 100vh; /* Make it take the full viewport height */
-        padding-top: 0px !important; /* Crucial: Remove Streamlit's default top padding */
-        padding-bottom: 0px !important; /* Remove Streamlit's default bottom padding */
-        margin-top: 0px !important; /* Remove any default top margin */
-        margin-bottom: 0px !important; /* Remove any default bottom margin */
+    /* General body/html styling for full height */
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden; /* Prevent horizontal scroll */
     }
 
-    /* Targets an inner wrapper div that might also have default spacing */
-    .st-emotion-cache-1sddxrb { /* Another common wrapper div */
-        padding-top: 0 !important;
+    /* Target the main Streamlit container (often the biggest culprit for top padding) */
+    .st-emotion-cache-1jmve30 { /* This is a common class for the main content area with layout="wide" */
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
+        padding-top: 0rem !important; /* Critical: remove top padding */
+        padding-bottom: 0rem !important; /* Critical: remove bottom padding */
         margin-top: 0 !important;
-        padding-bottom: 0 !important;
         margin-bottom: 0 !important;
+        min-height: 100vh; /* Ensure it tries to take full viewport height */
+        display: flex;
+        flex-direction: column; /* Ensure content stacks vertically */
+        justify-content: flex-start; /* Start content from the top */
+        width: 100%;
     }
 
-    /* Targets the specific block that contains your st.markdown content */
-    /* This can sometimes be another layer of div wrapping your content */
+    /* Target the inner block container where most user content sits */
     div.block-container {
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
+        padding-top: 0rem !important; /* Critical: remove top padding */
+        padding-bottom: 0rem !important; /* Critical: remove bottom padding */
         margin-top: 0 !important;
         margin-bottom: 0 !important;
+        flex-grow: 1; /* Allow this to grow and fill remaining space */
+        width: 100%;
     }
+
+    /* Specific overrides for common Streamlit wrapper divs */
+    /* These class names are auto-generated and might change. */
+    /* Use browser's inspect element (F12) to find the correct classes if still not working */
+    .st-emotion-cache-1sddxrb { /* Example of another wrapper div class */
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    .st-emotion-cache-z5fcl4 { /* Another common div that might add padding */
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    /* Add more .st-emotion-cache-XXXXXX { padding: 0 !important; margin: 0 !important; } rules here if needed */
 
 
     /* Sidebar styling with gradient */
@@ -54,7 +74,7 @@ st.markdown(
         color: white; /* Ensure text is visible on the gradient */
     }
     /* Adjust sidebar header color for contrast */
-    [data-testid="stSidebar"] .st-emotion-cache-16txt4v { /* Targeted class for header */
+    [data-testid="stSidebar"] .st-emotion-cache-16txt4v {
         color: white !important;
     }
 
@@ -74,54 +94,55 @@ st.markdown(
     }
     .stDownloadButton > button:hover {
         background-color: #0056b3 !important;
-        color: #fff !important; /* Keep text white on hover */
+        color: #fff !important;
     }
 
     /* --- Team Info Section Styling --- */
+    /* This container will now be the first child of a zero-padded block-container */
     .team-info-container {
         display: flex;
         flex-direction: column;
         align-items: center;
-        /* Flex-grow allows it to fill available height after parent spacing is removed */
-        flex-grow: 1;
-        width: 100%; /* Ensure it spans full width */
+        width: 100%;
         box-sizing: border-box; /* Include padding in width calculation */
-
-        /* Crucial: Remove top margin/padding from this container itself */
-        margin-top: 0 !important;
-        padding-top: 40px !important; /* Apply desired top padding *within* this container */
-        padding-bottom: 40px !important; /* Apply desired bottom padding *within* this container */
-        padding-left: 20px;
-        padding-right: 20px;
-
         background-color: #f0f2f6; /* Light background for the team page */
         color: #333;
         text-align: center;
-        /* min-height calculation is tricky; using flex-grow and padding removal is often more robust */
-        /* min-height: calc(100vh - 56px); -- You can uncomment/adjust this if still seeing issues */
+        flex-grow: 1; /* Ensure it grows to fill height */
+
+        /* Restore desired internal padding after removing outer padding */
+        padding-top: 40px !important;
+        padding-bottom: 40px !important;
+        padding-left: 20px;
+        padding-right: 20px;
+
+        /* If you still see a small gap at the very top, try commenting out the min-height: 100vh on .st-emotion-cache-1jmve30
+           and use this instead: */
+        min-height: calc(100vh - 56px); /* Roughly viewport height minus Streamlit's header/toolbar */
+        /* If Streamlit's top elements are completely removed, then just use 100vh */
     }
 
     .team-info-container h1 {
-        color: #007BFF; /* Blue color for the main heading */
-        margin-bottom: 40px; /* Space below the main heading */
-        font-size: 3em; /* Larger font size for prominence */
+        color: #007BFF;
+        margin-bottom: 40px;
+        font-size: 3em;
         text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-        padding-top: 0; /* Ensure no extra padding at the top of the h1 */
+        padding-top: 0;
     }
 
     .team-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsive grid */
-        gap: 30px; /* Space between team member cards */
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 30px;
         width: 100%;
-        max-width: 1200px; /* Max width for the grid to prevent too wide cards */
+        max-width: 1200px;
         margin-top: 30px;
     }
 
     .team-member-card {
         background-color: white;
         border-radius: 12px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); /* More pronounced shadow */
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
         padding: 25px;
         display: flex;
         flex-direction: column;
@@ -130,32 +151,32 @@ st.markdown(
     }
 
     .team-member-card:hover {
-        transform: translateY(-8px); /* More noticeable lift on hover */
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15); /* Stronger shadow on hover */
+        transform: translateY(-8px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     }
 
     .team-member-card img {
         width: 150px;
         height: 150px;
-        border-radius: 50%; /* Circular images */
-        object-fit: cover; /* Ensures image covers the area without distortion */
+        border-radius: 50%;
+        object-fit: cover;
         margin-bottom: 15px;
-        border: 5px solid #007BFF; /* Blue border for team photos */
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); /* Shadow on images */
+        border: 5px solid #007BFF;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
     }
 
     .team-member-card h3 {
-        color: #007BFF; /* Blue for names */
+        color: #007BFF;
         margin-bottom: 5px;
-        font-size: 1.6rem; /* Slightly larger name font */
+        font-size: 1.6rem;
         font-weight: 700;
     }
 
     .team-member-card p.role {
         color: #555;
-        font-size: 1.1rem; /* Slightly larger role font */
+        font-size: 1.1rem;
         font-style: italic;
-        margin-top: 0; /* Remove default paragraph margin */
+        margin-top: 0;
     }
 
     /* Full image view styling (for when a processed image is clicked) */
