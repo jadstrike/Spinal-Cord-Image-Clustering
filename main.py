@@ -8,15 +8,24 @@ import zipfile
 import os
 import base64
 
+# Set Streamlit page configuration
 st.set_page_config(page_title="Spinal Cord Image Clustering", layout="wide")
 
-# Custom CSS for gradient sidebar background and download button color
+# --- Custom CSS for beautiful styling ---
 st.markdown(
     """
     <style>
+    /* Sidebar styling with gradient */
     [data-testid="stSidebar"] {
         background: linear-gradient(135deg, #007BFF 0%, #6BCBFF 100%) !important;
+        color: white; /* Ensure text is visible on the gradient */
     }
+    /* Adjust sidebar header color for contrast */
+    [data-testid="stSidebar"] .st-emotion-cache-16txt4v { /* Targeted class for header */
+        color: white !important;
+    }
+
+    /* Download button styling */
     .stDownloadButton > button {
         background-color: #007BFF !important;
         color: white !important;
@@ -32,14 +41,98 @@ st.markdown(
     }
     .stDownloadButton > button:hover {
         background-color: #0056b3 !important;
-        color: #fff !important;
+        color: #fff !important; /* Keep text white on hover */
+    }
+
+    /* --- Team Info Section Styling --- */
+    .team-info-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 85vh; /* Takes most of the viewport height */
+        padding: 40px 20px; /* Add horizontal padding too */
+        background-color: #f0f2f6; /* Light background for the team page */
+        color: #333;
+        text-align: center;
+        width: 100%; /* Ensure it spans full width */
+        box-sizing: border-box; /* Include padding in width calculation */
+    }
+
+    .team-info-container h1 {
+        color: #007BFF; /* Blue color for the main heading */
+        margin-bottom: 40px; /* Space below the main heading */
+        font-size: 3em; /* Larger font size for prominence */
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .team-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsive grid */
+        gap: 30px; /* Space between team member cards */
+        width: 100%;
+        max-width: 1200px; /* Max width for the grid to prevent too wide cards */
+        margin-top: 30px;
+    }
+
+    .team-member-card {
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); /* More pronounced shadow */
+        padding: 25px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .team-member-card:hover {
+        transform: translateY(-8px); /* More noticeable lift on hover */
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15); /* Stronger shadow on hover */
+    }
+
+    .team-member-card img {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%; /* Circular images */
+        object-fit: cover; /* Ensures image covers the area without distortion */
+        margin-bottom: 15px;
+        border: 5px solid #007BFF; /* Blue border for team photos */
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); /* Shadow on images */
+    }
+
+    .team-member-card h3 {
+        color: #007BFF; /* Blue for names */
+        margin-bottom: 5px;
+        font-size: 1.6rem; /* Slightly larger name font */
+        font-weight: 700;
+    }
+
+    .team-member-card p.role {
+        color: #555;
+        font-size: 1.1rem; /* Slightly larger role font */
+        font-style: italic;
+        margin-top: 0; /* Remove default paragraph margin */
+    }
+
+    /* Full image view styling */
+    .full-image-view {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        padding: 20px;
+        box-sizing: border-box;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Function to check font availability
+# --- Utility Functions ---
+
+# Function to check font availability (for OpenCV text rendering)
 def check_fonts():
     try:
         test_img = np.zeros((100,100,3), dtype=np.uint8)
@@ -48,10 +141,10 @@ def check_fonts():
     except:
         return False
 
-# Initialize font availability
+# Initialize font availability (global flag)
 FONT_AVAILABLE = check_fonts()
 
-# Function to resize large images
+# Function to resize large images (for image processing, not display of team photos)
 def resize_image(image, max_size=1000):
     h, w = image.shape
     if max(h, w) > max_size:
@@ -60,7 +153,7 @@ def resize_image(image, max_size=1000):
         image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return image
 
-# CLAHE preprocessing
+# CLAHE preprocessing for medical images
 def preprocess_image(image):
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     return clahe.apply(image)
@@ -68,23 +161,24 @@ def preprocess_image(image):
 # K-Means enhancement
 def enhance_image_kmeans(image, n_clusters=8):
     pixel_values = image.reshape(-1, 1)
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    # Added n_init='auto' to suppress FutureWarning in newer scikit-learn versions
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
     kmeans.fit(pixel_values)
     labels = kmeans.labels_
     centers = kmeans.cluster_centers_
     segmented_pixels = centers[labels].reshape(image.shape)
     return cv2.normalize(segmented_pixels, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-# Image blending
+# Image blending for enhanced visualization
 def blend_images(original, clustered, alpha=0.7):
     original = original.astype(np.float32)
     clustered = clustered.astype(np.float32)
     blended = alpha * clustered + (1 - alpha) * original
     return cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-# Function to convert image array to raw PNG bytes
+# Function to convert image array to raw PNG bytes for download
 def image_to_bytes(image_array):
-    # Ensure the image is in uint8 format
+    # Ensure the image is in uint8 format (0-255)
     if image_array.dtype != np.uint8:
         image_array = cv2.normalize(image_array, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     
@@ -94,66 +188,125 @@ def image_to_bytes(image_array):
     img.save(buf, format='PNG')
     return buf.getvalue()
 
-# Function to convert image array to base64 string for display (if needed)
-def image_to_base64(image_array):
-    img_bytes = image_to_bytes(image_array)
-    return base64.b64encode(img_bytes).decode('utf-8')
-
-# Track which image is clicked for full view
+# --- Session State for Full Image View ---
 if "full_image" not in st.session_state:
     st.session_state.full_image = None
 if "full_image_caption" not in st.session_state:
     st.session_state.full_image_caption = None
 
-# Show full image in the center if set
+# Show full image in the center if set (this overlays other content)
 if st.session_state.full_image is not None:
-    st.markdown("""
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh;">
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class="full-image-view">""", unsafe_allow_html=True)
     st.image(st.session_state.full_image, use_column_width=False, caption=st.session_state.full_image_caption)
-    st.markdown("""
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""</div>""", unsafe_allow_html=True)
     if st.button("Close Full Image", key="close_full_image", help="Close the full image view"):
         st.session_state.full_image = None
         st.session_state.full_image_caption = None
-    st.markdown("---")
+    st.markdown("---") # Separator
 
-# Streamlit UI
+# --- Streamlit UI Layout ---
 st.sidebar.header("Spinal Cord Image Clustering")
 uploaded_file = st.sidebar.file_uploader("Upload spine image", type=["jpg","png","jpeg"])
-show_team = st.sidebar.checkbox("Show Team Info")
+# Use a key to ensure this checkbox doesn't interfere with other widgets' state
+show_team = st.sidebar.checkbox("Show Team Info", help="Tick to view information about the development team.", key="show_team_checkbox")
 
-# Layout: main content (left), team info (right if checked)
+# --- Conditional Content Display ---
+
 if show_team:
-    main_col, team_col = st.columns([3, 1])
-else:
-    main_col = st.container()
-    team_col = None
+    # --- Team Info Page ---
+    st.markdown('<div class="team-info-container">', unsafe_allow_html=True)
+    st.markdown('<h1>Meet Our Amazing Team</h1>', unsafe_allow_html=True)
+    st.markdown('<div class="team-grid">', unsafe_allow_html=True)
+    
+    # Define team members data
+    team = [
+        {
+            "name": "Ye Lin Soe",
+            "role": "Team Leader",
+            "img": "./yls.jpeg" # Local path (ensure file is in same directory)
+        },
+        {
+            "name": "Khant Zwe Naing",
+            "role": "Lead Developer",
+            "img": "./kzn.jpg" # Local path
+        },
+        {
+            "name": "A. Traore",
+            "role": "Lead Developer",
+            "img": "./abu.jpeg" # Local path
+        },
+        {
+            "name": "Dr. D. Mbiba",
+            "role": "Project Advisor",
+            "img": "https://randomuser.me/api/portraits/men/68.jpg" # Example URL (can be replaced with local file)
+        },
+        {
+            "name": "Rishika",
+            "role": "Data Analyst",
+            "img": "https://randomuser.me/api/portraits/women/68.jpg" # Example URL
+        },
+    ]
 
-with main_col:
+    # Render each team member card
+    for member in team:
+        image_source = ""
+        try:
+            # Check if it's a local file path (doesn't start with http)
+            if not member["img"].startswith("http"):
+                local_img_path = member["img"].replace("./", "") # Remove leading './' if present
+                if os.path.exists(local_img_path):
+                    with open(local_img_path, "rb") as f:
+                        # Encode local image to Base64 for embedding in HTML
+                        image_source = f"data:image/jpeg;base64,{base64.b64encode(f.read()).decode('utf-8')}"
+                else:
+                    # Fallback to placeholder if local file not found
+                    st.warning(f"Local image not found for {member['name']}: {local_img_path}. Using placeholder.")
+                    image_source = f"https://via.placeholder.com/150/007BFF/FFFFFF?text={member['name'].split()[0]}"
+            else: # Assume it's a URL
+                image_source = member["img"]
+        except Exception as e:
+            st.error(f"Error loading image for {member['name']}: {e}. Using placeholder.")
+            image_source = f"https://via.placeholder.com/150/007BFF/FFFFFF?text={member['name'].split()[0]}" # Fallback
+
+        st.markdown(f"""
+            <div class="team-member-card">
+                <img src="{image_source}" alt="{member['name']}">
+                <h3>{member["name"]}</h3>
+                <p class="role">{member["role"]}</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True) # Close team-grid
+    st.markdown('</div>', unsafe_allow_html=True) # Close team-info-container
+
+else:
+    # --- Main Image Clustering UI ---
     st.title("Spinal Cord Image Clustering and Analysis")
 
     if uploaded_file:
-        # Keep original image for display
-        original_image = Image.open(uploaded_file)         # Do NOT convert to grayscale here
+        # Read image using PIL (handles various formats)
+        original_image = Image.open(uploaded_file)
+        # Convert to numpy array for OpenCV processing, ensure RGB for display
         original_array = np.array(original_image)
+        if original_array.ndim == 2: # If grayscale, convert to 3 channels for st.image display
+            original_array = cv2.cvtColor(original_array, cv2.COLOR_GRAY2RGB)
+        elif original_array.shape[2] == 4: # If RGBA, convert to RGB
+            original_array = original_array[:, :, :3]
 
         # Convert to grayscale for processing
         gray_image = original_image.convert('L')
-        img_array = np.array(gray_image)
-
+        img_array = np.array(gray_image) # This is the array for processing pipeline
         
         filename = os.path.splitext(uploaded_file.name)[0]
         
-        # Processing pipeline
+        # Apply image processing pipeline
         processed = preprocess_image(img_array)
         clustered = enhance_image_kmeans(processed, 8)
         enhanced = blend_images(processed, clustered)
         
         # Prepare images for download
         images_dict = {
-            'Original': img_array,
+            'Original': img_array, # Use the grayscale array for original in dict, but original_array for display
             'Preprocessed': processed,
             'Clustered': clustered,
             'Enhanced': enhanced
@@ -162,15 +315,15 @@ with main_col:
         # Prepare ZIP for download
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for key, img_array in images_dict.items():
-                img_bytes = image_to_bytes(img_array)  # Get raw PNG bytes
+            for key, img_arr_to_save in images_dict.items():
+                img_bytes = image_to_bytes(img_arr_to_save) # Get raw PNG bytes
                 zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
         zip_buffer.seek(0)
         
-        # Display images: Original, Preprocessed, Clustered, Enhanced
+        # Display images in 4 columns
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.image(original_array, caption="Original", use_column_width=True)
+            st.image(original_array, caption="Original", use_column_width=True) # Display RGB original
         with col2:
             st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
         with col3:
@@ -179,34 +332,34 @@ with main_col:
             st.image(enhanced, caption="Enhanced (Blended)", use_column_width=True)
 
         # Download buttons under each image
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
+        col1_dl, col2_dl, col3_dl, col4_dl = st.columns(4) # Use new column names for clarity
+        with col1_dl:
             st.download_button(
-                label="Download Original Image",
-                data=image_to_bytes(img_array),
+                label="Download Original",
+                data=image_to_bytes(img_array), # Download processed grayscale original
                 file_name=f"{filename}_original.png",
                 mime="image/png",
                 key="download1"
             )
-        with col2:
+        with col2_dl:
             st.download_button(
-                label="Download Preprocessed Image",
+                label="Download Preprocessed",
                 data=image_to_bytes(processed),
                 file_name=f"{filename}_preprocessed.png",
                 mime="image/png",
                 key="download2"
             )
-        with col3:
+        with col3_dl:
             st.download_button(
-                label="Download Clustered Image",
+                label="Download Clustered",
                 data=image_to_bytes(clustered),
                 file_name=f"{filename}_clustered.png",
                 mime="image/png",
                 key="download3"
             )
-        with col4:
+        with col4_dl:
             st.download_button(
-                label="Download Enhanced Image",
+                label="Download Enhanced",
                 data=image_to_bytes(enhanced),
                 file_name=f"{filename}_enhanced.png",
                 mime="image/png",
@@ -223,42 +376,4 @@ with main_col:
         )
 
     else:
-        st.info("Please upload a spinal X-ray image to begin analysis")
-
-if show_team and team_col is not None:
-    with team_col:
-        st.markdown("---")
-        st.header("Meet the Team")
-        team = [
-            {
-                "name": "Ye Lin Soe",
-                "role": "Team Leader",
-                "img": "yls.jpeg"
-            },
-            {
-                "name": "Khant Zwe Naing",
-                "role": "Lead Developer",
-                "img": "./kzn.jpg"
-            },
-            {
-                "name": "A. Traore",
-                "role": "Lead Developer",
-                "img": "./abu.jpeg"
-            },
-             {
-                "name": "Dr. D. Mbiba",
-                "role": "Lorum Ipsum",
-                "img": "https://randomuser.me/api/portraits/women/68.jpg"
-            },
-            {
-                "name": "Rishika",
-                "role": "Lorum Ipsum",
-                "img": "https://randomuser.me/api/portraits/women/68.jpg"
-            },
-            
-            
-        ]
-        for member in team:
-            st.image(member["img"], width=100)
-            st.subheader(member["name"])
-            st.caption(member["role"])
+        st.info("Please upload a spinal X-ray image to begin analysis.")
