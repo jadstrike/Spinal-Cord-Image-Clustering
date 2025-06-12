@@ -57,9 +57,9 @@ def check_fonts():
 # Initialize font availability
 FONT_AVAILABLE = check_fonts()
 
-# Function to resize image to consistent dimensions
-def resize_to_standard(image, target_width=400, target_height=400):
-    """Resize image to standard dimensions while maintaining aspect ratio"""
+# Function to resize image to consistent dimensions for DISPLAY ONLY
+def resize_for_display(image, target_width=400, target_height=400):
+    """Resize image to standard dimensions for display purposes only"""
     if len(image.shape) == 2:  # Grayscale
         h, w = image.shape
     else:  # Color
@@ -69,11 +69,11 @@ def resize_to_standard(image, target_width=400, target_height=400):
     scale = min(target_width/w, target_height/h)
     new_w, new_h = int(w * scale), int(h * scale)
     
-    # Resize the image
+    # Resize the image using high-quality interpolation
     if len(image.shape) == 2:
-        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
     else:
-        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
     
     # Create a canvas of target size and center the resized image
     if len(image.shape) == 2:
@@ -93,6 +93,22 @@ def resize_to_standard(image, target_width=400, target_height=400):
     
     return canvas
 
+# Function to maintain original image dimensions during processing
+def process_at_original_size(image, max_processing_size=2048):
+    """
+    Process image at original size, but limit extremely large images for performance
+    Returns the processed image at original dimensions
+    """
+    h, w = image.shape[:2] if len(image.shape) > 2 else image.shape
+    
+    # Only resize if image is extremely large (for performance)
+    if max(h, w) > max_processing_size:
+        scale = max_processing_size / max(h, w)
+        new_h, new_w = int(h * scale), int(w * scale)
+        return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+    
+    return image
+
 # Function to resize large images
 def resize_image(image, max_size=1000):
     h, w = image.shape
@@ -102,38 +118,85 @@ def resize_image(image, max_size=1000):
         image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return image
 
-# CLAHE preprocessing
+# CLAHE preprocessing - enhanced for quality
 def preprocess_image(image):
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    return clahe.apply(image)
+    """Apply CLAHE preprocessing while maintaining image quality"""
+    # Ensure we're working with the full resolution image
+    image = process_at_original_size(image)
+    
+    # Apply CLAHE with optimized parameters for medical images
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    processed = clahe.apply(image)
+    
+    # Optional: Apply slight gaussian blur to reduce noise while preserving edges
+    processed = cv2.bilateralFilter(processed, 5, 75, 75)
+    
+    return processed
 
-# K-Means enhancement
+# K-Means enhancement - optimized for quality
 def enhance_image_kmeans(image, n_clusters=8):
-    pixel_values = image.reshape(-1, 1)
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    """Apply K-means clustering while preserving image quality"""
+    # Ensure we're working with full resolution
+    original_shape = image.shape
+    
+    # Reshape for clustering
+    pixel_values = image.reshape(-1, 1).astype(np.float32)
+    
+    # Apply K-means with better initialization
+    kmeans = KMeans(
+        n_clusters=n_clusters, 
+        random_state=42, 
+        init='k-means++',  # Better initialization
+        n_init=10,         # More initializations for stability
+        max_iter=300       # More iterations for convergence
+    )
     kmeans.fit(pixel_values)
+    
+    # Get cluster centers and labels
     labels = kmeans.labels_
     centers = kmeans.cluster_centers_
-    segmented_pixels = centers[labels].reshape(image.shape)
+    
+    # Reconstruct the image
+    segmented_pixels = centers[labels].reshape(original_shape)
+    
+    # Normalize to preserve dynamic range
     return cv2.normalize(segmented_pixels, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-# Image blending
+# Image blending - enhanced for quality preservation
 def blend_images(original, clustered, alpha=0.7):
+    """Blend images while preserving quality and dynamic range"""
+    # Ensure both images are the same size and type
+    if original.shape != clustered.shape:
+        clustered = cv2.resize(clustered, (original.shape[1], original.shape[0]), 
+                              interpolation=cv2.INTER_LANCZOS4)
+    
+    # Convert to float32 for precision
     original = original.astype(np.float32)
     clustered = clustered.astype(np.float32)
+    
+    # Perform blending
     blended = alpha * clustered + (1 - alpha) * original
-    return cv2.normalize(blended, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    
+    # Normalize back to uint8 while preserving full dynamic range
+    blended = np.clip(blended, 0, 255)
+    return blended.astype(np.uint8)
 
-# Function to convert image array to raw PNG bytes
-def image_to_bytes(image_array):
+# High-quality image conversion function
+def image_to_bytes(image_array, quality=95):
+    """Convert image array to high-quality PNG bytes"""
     # Ensure the image is in uint8 format
     if image_array.dtype != np.uint8:
         image_array = cv2.normalize(image_array, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     
-    # Convert to PIL Image and save to PNG bytes
-    img = Image.fromarray(image_array)
+    # Convert to PIL Image with high quality settings
+    if len(image_array.shape) == 2:  # Grayscale
+        img = Image.fromarray(image_array, mode='L')
+    else:  # Color
+        img = Image.fromarray(image_array)
+    
+    # Save to PNG with maximum quality (lossless compression)
     buf = io.BytesIO()
-    img.save(buf, format='PNG')
+    img.save(buf, format='PNG', optimize=False, compress_level=1)  # Low compression for max quality
     return buf.getvalue()
 
 # Function to convert image array to base64 string for display (if needed)
@@ -181,31 +244,37 @@ with main_col:
         original_image = Image.open(uploaded_file)         # Do NOT convert to grayscale here
         original_array = np.array(original_image)
 
-        # Convert to grayscale for processing
+        # Convert to grayscale for processing - preserve original resolution
         gray_image = original_image.convert('L')
         img_array = np.array(gray_image)
-
         
         filename = os.path.splitext(uploaded_file.name)[0]
         
-        # Processing pipeline
+        # Processing pipeline - ALL AT ORIGINAL RESOLUTION
+        st.info("Processing images at original resolution for maximum quality...")
+        
+        # Process at full resolution
         processed = preprocess_image(img_array)
         clustered = enhance_image_kmeans(processed, 8)
         enhanced = blend_images(processed, clustered)
         
-        # Resize all images to consistent dimensions for display
+        # Create display versions ONLY for showing on screen
         target_width, target_height = 400, 400
-        original_display = resize_to_standard(original_array, target_width, target_height)
-        processed_display = resize_to_standard(processed, target_width, target_height)
-        clustered_display = resize_to_standard(clustered, target_width, target_height)
-        enhanced_display = resize_to_standard(enhanced, target_width, target_height)
+        original_display = resize_for_display(original_array, target_width, target_height)
+        processed_display = resize_for_display(processed, target_width, target_height)
+        clustered_display = resize_for_display(clustered, target_width, target_height)
+        enhanced_display = resize_for_display(enhanced, target_width, target_height)
         
-        # Prepare images for download (keep original sizes)
+        # Show image dimensions info
+        st.success(f"✅ Original image dimensions: {img_array.shape[1]} × {img_array.shape[0]} pixels")
+        st.success(f"📱 Display size: {target_width} × {target_height} pixels (for viewing only)")
+        
+        # Prepare FULL RESOLUTION images for download
         images_dict = {
-            'Original': img_array,
-            'Preprocessed': processed,
-            'Clustered': clustered,
-            'Enhanced': enhanced
+            'Original': img_array,           # Full resolution grayscale
+            'Preprocessed': processed,       # Full resolution processed
+            'Clustered': clustered,         # Full resolution clustered
+            'Enhanced': enhanced            # Full resolution enhanced
         }
         
         # Prepare ZIP for download
@@ -295,14 +364,14 @@ if show_team and team_col is not None:
                 "img": "./abu.jpeg"
             },
              {
-                "name": "Dr. D. Mbiba",
-                "role": "Lorum Ipsum",
-                "img": "https://randomuser.me/api/portraits/women/68.jpg"
+                "name": "Dr Dumisani Mbib",
+                "role": "Clinical Consultant",
+                "img": "./dr.jpeg"
             },
             {
                 "name": "Rishika",
-                "role": "Lorum Ipsum",
-                "img": "https://randomuser.me/api/portraits/women/68.jpg"
+                "role": "Poster and Analyst",
+                "img": "./rishika.jpeg"
             },
             
             
