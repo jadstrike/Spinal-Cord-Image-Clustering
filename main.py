@@ -486,89 +486,50 @@ with main_col:
         </div>
         """, unsafe_allow_html=True)
 
-# Team information section
 if show_team and team_col is not None:
     with team_col:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    padding: 20px; border-radius: 15px; margin-bottom: 20px;">
-            <h3 style="color: white; text-align: center; margin-bottom: 20px;">
-                👥 Meet Our Team
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("---")
+        st.header("Meet the Team")
         team = [
-            {"name": "Ye Lin Soe", "role": "Team Leader", "img": "yls.jpeg", "icon": "👑"},
-            {"name": "Khant Zwe Naing", "role": "Lead Developer", "img": "./kzn.jpg", "icon": "💻"},
-            {"name": "A. Traore", "role": "Lead Developer", "img": "./abu.jpeg", "icon": "⚡"},
-            {"name": "Dr Dumisani Mbib", "role": "Clinical Consultant", "img": "./dr.jpeg", "icon": "🩺"},
-            {"name": "Rishika", "role": "Poster and Analyst", "img": "./rishika.jpeg", "icon": "📊"},
+            {
+                "name": "Ye Lin Soe",
+                "role": "Team Leader",
+                "img": "yls.jpeg"
+            },
+            {
+                "name": "Khant Zwe Naing",
+                "role": "Lead Developer",
+                "img": "./kzn.jpg"
+            },
+            {
+                "name": "A. Traore",
+                "role": "Lead Developer",
+                "img": "./abu.jpeg"
+            },
+             {
+                "name": "Dr Dumisani Mbib",
+                "role": "Clinical Consultant",
+                "img": "./dr.jpeg"
+            },
+            {
+                "name": "Rishika",
+                "role": "Poster and Analyst",
+                "img": "./rishika.jpeg"
+            },
+            
+            
         ]
-        
-        for i, member in enumerate(team):
-            # Alternate background colors for variety
-            bg_color = "#f8f9fc" if i % 2 == 0 else "#ffffff"
-            
-            st.markdown(f"""
-            <div style="background: {bg_color}; 
-                        border-radius: 12px; 
-                        padding: 15px; 
-                        margin: 15px 0; 
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                        border-left: 4px solid #667eea;
-                        transition: transform 0.2s ease;">
-                <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                    <span style="font-size: 1.5rem; margin-right: 10px;">{member['icon']}</span>
-                    <div>
-                        <h4 style="margin: 0; color: #2c3e50; font-size: 1.1rem;">
-                            {member['name']}
-                        </h4>
-                        <p style="margin: 0; color: #7f8c8d; font-size: 0.9rem; font-style: italic;">
-                            {member['role']}
-                        </p>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Try to display image, fallback to placeholder
+        for member in team:
+            # Load image with high quality
             try:
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.image(member["img"], width=100, caption=f"{member['name']}")
+                # Use PIL to load and ensure high quality
+                team_img = Image.open(member["img"])
+                # Convert to RGB if needed
+                if team_img.mode != 'RGB':
+                    team_img = team_img.convert('RGB')
+                # Display with high quality
+                st.image(team_img, width=100)
             except:
-                st.markdown(f"""
-                <div style="text-align: center; padding: 20px; 
-                           background: #ecf0f1; border-radius: 8px; margin: 10px 0;">
-                    <span style="font-size: 3rem; color: #bdc3c7;">👤</span>
-                    <p style="margin: 5px 0; color: #7f8c8d; font-size: 0.8rem;">
-                        Photo not available
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Add team stats or additional info
-        st.markdown("""
-        <div style="background: #e8f4fd; 
-                    border-radius: 10px; 
-                    padding: 15px; 
-                    margin-top: 20px;
-                    text-align: center;">
-            <h4 style="color: #2980b9; margin-bottom: 10px;">Team Statistics</h4>
-            <div style="display: flex; justify-content: space-around; text-align: center;">
-                <div>
-                    <strong style="color: #e74c3c;">5</strong>
-                    <p style="margin: 0; font-size: 0.8rem; color: #7f8c8d;">Members</p>
-                </div>
-                <div>
-                    <strong style="color: #27ae60;">3</strong>
-                    <p style="margin: 0; font-size: 0.8rem; color: #7f8c8d;">Developers</p>
-                </div>
-                <div>
-                    <strong style="color: #f39c12;">1</strong>
-                    <p style="margin: 0; font-size: 0.8rem; color: #7f8c8d;">Doctor</p>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+                st.image(member["img"], width=100)
+            st.subheader(member["name"])
+            st.caption(member["role"])
