@@ -355,7 +355,7 @@ if show_team and team_col is not None:
                 "img": "./kzn.jpg"
             },
             {
-                "name": "A. Traore",
+                "name": "Abubakr Traore",
                 "role": "Lead Developer",
                 "img": "./abu.jpeg"
             },
@@ -366,7 +366,7 @@ if show_team and team_col is not None:
             },
             {
                 "name": "Rishika",
-                "role": "Poster and Analyst",
+                "role": "Analyst",
                 "img": "./rishika.jpeg"
             },
             
