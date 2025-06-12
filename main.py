@@ -34,6 +34,12 @@ st.markdown(
         background-color: #0056b3 !important;
         color: #fff !important;
     }
+    /* Custom CSS to ensure consistent image sizes */
+    .stImage > img {
+        width: 100% !important;
+        height: 300px !important;
+        object-fit: cover !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -50,6 +56,42 @@ def check_fonts():
 
 # Initialize font availability
 FONT_AVAILABLE = check_fonts()
+
+# Function to resize image to consistent dimensions
+def resize_to_standard(image, target_width=400, target_height=400):
+    """Resize image to standard dimensions while maintaining aspect ratio"""
+    if len(image.shape) == 2:  # Grayscale
+        h, w = image.shape
+    else:  # Color
+        h, w = image.shape[:2]
+    
+    # Calculate scaling factor to fit within target dimensions
+    scale = min(target_width/w, target_height/h)
+    new_w, new_h = int(w * scale), int(h * scale)
+    
+    # Resize the image
+    if len(image.shape) == 2:
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    else:
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    
+    # Create a canvas of target size and center the resized image
+    if len(image.shape) == 2:
+        canvas = np.zeros((target_height, target_width), dtype=image.dtype)
+    else:
+        canvas = np.zeros((target_height, target_width, image.shape[2]), dtype=image.dtype)
+    
+    # Calculate position to center the image
+    y_offset = (target_height - new_h) // 2
+    x_offset = (target_width - new_w) // 2
+    
+    # Place the resized image on the canvas
+    if len(image.shape) == 2:
+        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
+    else:
+        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
+    
+    return canvas
 
 # Function to resize large images
 def resize_image(image, max_size=1000):
@@ -151,7 +193,14 @@ with main_col:
         clustered = enhance_image_kmeans(processed, 8)
         enhanced = blend_images(processed, clustered)
         
-        # Prepare images for download
+        # Resize all images to consistent dimensions for display
+        target_width, target_height = 400, 400
+        original_display = resize_to_standard(original_array, target_width, target_height)
+        processed_display = resize_to_standard(processed, target_width, target_height)
+        clustered_display = resize_to_standard(clustered, target_width, target_height)
+        enhanced_display = resize_to_standard(enhanced, target_width, target_height)
+        
+        # Prepare images for download (keep original sizes)
         images_dict = {
             'Original': img_array,
             'Preprocessed': processed,
@@ -167,16 +216,16 @@ with main_col:
                 zip_file.writestr(f"{filename}_{key.lower()}.png", img_bytes)
         zip_buffer.seek(0)
         
-        # Display images: Original, Preprocessed, Clustered, Enhanced
+        # Display images with consistent sizes
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.image(original_array, caption="Original", use_column_width=True)
+            st.image(original_display, caption="Original", width=300)
         with col2:
-            st.image(processed, caption="Preprocessed (CLAHE)", use_column_width=True)
+            st.image(processed_display, caption="Preprocessed (CLAHE)", width=300)
         with col3:
-            st.image(clustered, caption="Clustered (K-Means)", use_column_width=True)
+            st.image(clustered_display, caption="Clustered (K-Means)", width=300)
         with col4:
-            st.image(enhanced, caption="Enhanced (Blended)", use_column_width=True)
+            st.image(enhanced_display, caption="Enhanced (Blended)", width=300)
 
         # Download buttons under each image
         col1, col2, col3, col4 = st.columns(4)
